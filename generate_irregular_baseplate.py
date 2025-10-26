@@ -96,6 +96,172 @@ def find_largest_rectangle(mask: np.ndarray, start_row: int, start_col: int) -> 
     return (best_width, best_height)
 
 
+def extract_border_rectangles_mm(mask: np.ndarray, border_thickness_mm: float, unit_size: float = 8.0) -> List[Tuple[float, float, float, float]]:
+    """
+    Extract border region outside the shape and decompose into mm-based rectangles.
+
+    Args:
+        mask: 2D boolean array where True = inside shape (in brick units)
+        border_thickness_mm: Thickness of border in millimeters
+        unit_size: Size of one brick unit in mm (default 8.0)
+
+    Returns:
+        List of rectangles as (x_mm, y_mm, width_mm, height_mm) tuples in millimeters
+    """
+    rows, cols = mask.shape
+
+    # Find the bounding edges of the shape
+    # For each pixel on the edge of the shape, we'll create a border rectangle
+    border_rects = []
+
+    # Process each pixel in the mask
+    for row in range(rows):
+        for col in range(cols):
+            if mask[row, col]:
+                # Check if this pixel is on the edge (has at least one non-shape neighbor)
+                is_edge = False
+
+                # Check all 8 neighbors
+                for dr in [-1, 0, 1]:
+                    for dc in [-1, 0, 1]:
+                        if dr == 0 and dc == 0:
+                            continue
+                        nr, nc = row + dr, col + dc
+
+                        # If neighbor is outside bounds or not in shape, this is an edge
+                        if nr < 0 or nr >= rows or nc < 0 or nc >= cols or not mask[nr, nc]:
+                            is_edge = True
+                            break
+                    if is_edge:
+                        break
+
+                # If this is an edge pixel, determine which sides need borders
+                if is_edge:
+                    # Check each of 8 directions and add border rectangles
+                    # We check all 8 neighbors and add borders for missing ones
+
+                    # Helper to check if position is in mask
+                    def is_in_shape(r, c):
+                        if r < 0 or r >= rows or c < 0 or c >= cols:
+                            return False
+                        return mask[r, c]
+
+                    # Top (North)
+                    if not is_in_shape(row - 1, col):
+                        x_mm = col * unit_size
+                        y_mm = row * unit_size - border_thickness_mm
+                        width_mm = unit_size
+                        height_mm = border_thickness_mm
+                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
+
+                    # Bottom (South)
+                    if not is_in_shape(row + 1, col):
+                        x_mm = col * unit_size
+                        y_mm = (row + 1) * unit_size
+                        width_mm = unit_size
+                        height_mm = border_thickness_mm
+                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
+
+                    # Left (West)
+                    if not is_in_shape(row, col - 1):
+                        x_mm = col * unit_size - border_thickness_mm
+                        y_mm = row * unit_size
+                        width_mm = border_thickness_mm
+                        height_mm = unit_size
+                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
+
+                    # Right (East)
+                    if not is_in_shape(row, col + 1):
+                        x_mm = (col + 1) * unit_size
+                        y_mm = row * unit_size
+                        width_mm = border_thickness_mm
+                        height_mm = unit_size
+                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
+
+                    # Top-Left (NorthWest) corner
+                    if not is_in_shape(row - 1, col - 1):
+                        x_mm = col * unit_size - border_thickness_mm
+                        y_mm = row * unit_size - border_thickness_mm
+                        width_mm = border_thickness_mm
+                        height_mm = border_thickness_mm
+                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
+
+                    # Top-Right (NorthEast) corner
+                    if not is_in_shape(row - 1, col + 1):
+                        x_mm = (col + 1) * unit_size
+                        y_mm = row * unit_size - border_thickness_mm
+                        width_mm = border_thickness_mm
+                        height_mm = border_thickness_mm
+                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
+
+                    # Bottom-Left (SouthWest) corner
+                    if not is_in_shape(row + 1, col - 1):
+                        x_mm = col * unit_size - border_thickness_mm
+                        y_mm = (row + 1) * unit_size
+                        width_mm = border_thickness_mm
+                        height_mm = border_thickness_mm
+                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
+
+                    # Bottom-Right (SouthEast) corner
+                    if not is_in_shape(row + 1, col + 1):
+                        x_mm = (col + 1) * unit_size
+                        y_mm = (row + 1) * unit_size
+                        width_mm = border_thickness_mm
+                        height_mm = border_thickness_mm
+                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
+
+    # Now merge adjacent rectangles with the same position and size alignment
+    # This is a simplified greedy merge
+    return merge_mm_rectangles(border_rects)
+
+
+def merge_mm_rectangles(rectangles: List[Tuple[float, float, float, float]]) -> List[Tuple[float, float, float, float]]:
+    """
+    Merge adjacent mm-based rectangles to minimize the number of cubes.
+
+    Args:
+        rectangles: List of (x, y, width, height) tuples in mm
+
+    Returns:
+        Merged list of rectangles
+    """
+    if not rectangles:
+        return []
+
+    # Sort rectangles by y, then x
+    sorted_rects = sorted(rectangles, key=lambda r: (r[1], r[0]))
+
+    merged = []
+    current = list(sorted_rects[0])
+
+    for rect in sorted_rects[1:]:
+        x, y, w, h = rect
+        cx, cy, cw, ch = current
+
+        # Try to merge horizontally (same y, height, and adjacent/overlapping x)
+        if abs(y - cy) < 0.01 and abs(h - ch) < 0.01:
+            if abs(x - (cx + cw)) < 0.01:  # Adjacent on right
+                current[2] += w  # Extend width
+                continue
+            elif abs(x - cx) < 0.01 and abs(w - cw) < 0.01:  # Same position
+                continue  # Skip duplicate
+
+        # Try to merge vertically (same x, width, and adjacent/overlapping y)
+        if abs(x - cx) < 0.01 and abs(w - cw) < 0.01:
+            if abs(y - (cy + ch)) < 0.01:  # Adjacent on bottom
+                current[3] += h  # Extend height
+                continue
+
+        # Can't merge, save current and start new
+        merged.append(tuple(current))
+        current = list(rect)
+
+    # Add the last rectangle
+    merged.append(tuple(current))
+
+    return merged
+
+
 def extract_edge_and_interior(mask: np.ndarray, edge_thickness: int) -> Tuple[np.ndarray, np.ndarray]:
     """
     Separate a binary mask into edge and interior regions.
@@ -207,7 +373,10 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
                             output_path: str = "irregular_baseplate.scad",
                             debug: bool = False,
                             image_height: int = 0,
-                            interior_rectangles: Optional[List[Tuple[int, int, int, int]]] = None) -> None:
+                            interior_rectangles: Optional[List[Tuple[int, int, int, int]]] = None,
+                            border_rectangles: Optional[List[Tuple[float, float, float, float]]] = None,
+                            border_thickness_mm: float = 0.0,
+                            border_height_adjust_mm: float = 0.0) -> None:
     """
     Generate an OpenSCAD script that renders the baseplates.
 
@@ -223,6 +392,9 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
         debug: If True, use random colors for each baseplate
         image_height: Height of the source image in pixels (for Y-axis flipping)
         interior_rectangles: Optional list of rectangles for interior cubes (if using --edge mode)
+        border_rectangles: Optional list of rectangles for border cubes as (x_mm, y_mm, width_mm, height_mm) in millimeters
+        border_thickness_mm: Thickness of border in mm
+        border_height_adjust_mm: Height adjustment for border in mm
     """
     # OpenSCAD uses unitGrid = [5, 2] and unitMbu = 1.6
     # So each brick unit is 5 * 1.6 = 8mm in X/Y
@@ -309,6 +481,25 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
             script_lines.append("    ]);")
             script_lines.append("}")
 
+    # Generate border cubes if provided (these are in mm coordinates already)
+    if border_rectangles:
+        script_lines.append("\n// Border (cubes) - positioned and sized in millimeters")
+        script_lines.append(f"// Border thickness: {border_thickness_mm}mm, Height adjustment: {border_height_adjust_mm}mm")
+        for i, (x_mm, y_mm, width_mm, height_mm) in enumerate(border_rectangles):
+            # Border rectangles are already in mm, but Y needs flipping for OpenSCAD
+            # Convert image-space Y (where 0 is top) to OpenSCAD Y (where 0 is bottom)
+            translate_x = x_mm
+            translate_y = (image_height * unit_size) - y_mm - height_mm
+
+            script_lines.append(f"\n// Border cube {i + 1}: {width_mm:.2f}mm x {height_mm:.2f}mm at position ({x_mm:.2f}mm, {y_mm:.2f}mm)")
+            script_lines.append(f"translate([{translate_x:.4f}, {translate_y:.4f}, 0]) {{")
+            script_lines.append("    cube([")
+            script_lines.append(f"        {width_mm:.4f},  // width in mm")
+            script_lines.append(f"        {height_mm:.4f},  // height in mm")
+            script_lines.append(f"        (1 * unitGrid[1] * unitMbu * scale) + {border_height_adjust_mm}  // baseplate height without studs + adjustment")
+            script_lines.append("    ]);")
+            script_lines.append("}")
+
     # Write the script to file
     with open(output_path, 'w') as f:
         f.write('\n'.join(script_lines))
@@ -340,6 +531,21 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
         print(f"Total brick units covered by interior: {interior_area}")
         print("\nInterior cube sizes used:")
         for size, count in sorted(interior_sizes.items(), key=lambda x: x[1], reverse=True):
+            print(f"  {size}: {count} cubes")
+
+    # Print statistics for border cubes if present
+    if border_rectangles:
+        print(f"\nTotal border cubes: {len(border_rectangles)}")
+        border_area_mm2 = sum(w * h for _, _, w, h in border_rectangles)
+        border_sizes = {}
+        for _, _, w, h in border_rectangles:
+            size_key = f"{w:.2f}x{h:.2f}mm"
+            border_sizes[size_key] = border_sizes.get(size_key, 0) + 1
+
+        print(f"Border thickness: {border_thickness_mm}mm, Height adjustment: {border_height_adjust_mm}mm")
+        print(f"Total area covered by border: {border_area_mm2:.2f} mm²")
+        print("\nBorder cube sizes used (in mm):")
+        for size, count in sorted(border_sizes.items(), key=lambda x: x[1], reverse=True):
             print(f"  {size}: {count} cubes")
 
 
@@ -378,12 +584,40 @@ def main():
         metavar='THICKNESS',
         help='Only generate baseplates on edge (default thickness: 1 brick unit). Interior filled with cubes. Value must be >= 1.'
     )
+    parser.add_argument(
+        '--border',
+        nargs='?',
+        const=5.0,
+        type=float,
+        metavar='THICKNESS_MM',
+        help='Add border around shape edge (default thickness: 5mm). Border is drawn outside shape using cubes. Value must be != 0.'
+    )
+    parser.add_argument(
+        '--borderHeightAdjust',
+        type=float,
+        default=0.0,
+        metavar='ADJUST_MM',
+        help='Adjustment to border height in mm (default: 0). Added to standard baseplate height without studs. Can be negative to reduce height, but final height must be > 0.'
+    )
 
     args = parser.parse_args()
 
     # Validate edge thickness if provided
     if args.edge is not None and args.edge < 1:
         parser.error("--edge value must be >= 1")
+
+    # Validate border thickness if provided
+    if args.border is not None and args.border == 0:
+        parser.error("--border value must be != 0")
+
+    # Validate border height will be positive
+    if args.border is not None:
+        # Calculate base border height: unitGrid[1] * unitMbu * scale
+        # Using default values: 2 * 1.6 * 1.0 = 3.2mm
+        base_border_height = 2.0 * 1.6 * 1.0  # Default MachineBlocks values
+        final_border_height = base_border_height + args.borderHeightAdjust
+        if final_border_height <= 0:
+            parser.error(f"Border height would be {final_border_height:.2f}mm (base {base_border_height}mm + adjust {args.borderHeightAdjust}mm). Final height must be > 0.")
 
     try:
         # Step 1: Load and threshold the image
@@ -396,6 +630,8 @@ def main():
         print("\nDecomposing shape into rectangles...")
 
         interior_rectangles = None
+        border_rectangles = None
+
         if args.edge is not None:
             # Edge mode: separate edge and interior
             print(f"Edge mode enabled: edge thickness = {args.edge} brick units")
@@ -413,6 +649,14 @@ def main():
             # Normal mode: all baseplates
             rectangles = greedy_rectangle_decomposition(binary_mask)
 
+        # Step 2b: Generate border if requested
+        if args.border is not None:
+            print(f"\nBorder mode enabled: border thickness = {args.border}mm")
+
+            # Generate border rectangles directly in mm coordinates
+            border_rectangles = extract_border_rectangles_mm(binary_mask, args.border)
+            print(f"Generated {len(border_rectangles)} border rectangles")
+
         # Step 3: Generate OpenSCAD script
         print("\nGenerating OpenSCAD script...")
         if args.debug:
@@ -422,7 +666,10 @@ def main():
             args.output,
             debug=args.debug,
             image_height=binary_mask.shape[0],
-            interior_rectangles=interior_rectangles
+            interior_rectangles=interior_rectangles,
+            border_rectangles=border_rectangles,
+            border_thickness_mm=args.border if args.border is not None else 0.0,
+            border_height_adjust_mm=args.borderHeightAdjust
         )
 
         print("\nDone!")

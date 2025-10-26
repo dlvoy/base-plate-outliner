@@ -134,6 +134,9 @@ If no image is specified, it defaults to `image.png`.
 - `-o, --output` - Path to output OpenSCAD file (default: `irregular_baseplate.scad`)
 - `-t, --threshold` - Grayscale threshold (0-255). Pixels darker than this value are considered "inside" the shape (default: 128)
 - `--debug` - Enable debug mode: each baseplate gets a random color with varying hue (useful for visualizing individual baseplates)
+- `--edge [THICKNESS]` - Only generate baseplates on the edge of the shape with specified thickness in brick units (default: 1 if no value given). Interior is filled with solid cubes for efficiency. Value must be >= 1
+- `--border [THICKNESS_MM]` - Add a border around the outside edge of the shape with specified thickness in millimeters (default: 5mm if no value given). Border is created using solid cubes positioned precisely in mm. Value must be != 0
+- `--borderHeightAdjust ADJUST_MM` - Adjust the height of the border in millimeters (default: 0). This adjustment is added to the standard baseplate height (without studs). Can be positive (taller border) or negative (shorter border), but the final height must be > 0 (base height is 3.2mm)
 
 ### Examples
 
@@ -152,6 +155,27 @@ python3 generate_irregular_baseplate.py my_shape.png -t 100
 
 # Debug mode with random colors for each baseplate
 python3 generate_irregular_baseplate.py my_shape.png --debug
+
+# Edge mode: only 1 brick unit thick edge with baseplates, rest filled with cubes
+python3 generate_irregular_baseplate.py my_shape.png --edge
+
+# Edge mode with 3 brick units thickness
+python3 generate_irregular_baseplate.py my_shape.png --edge=3
+
+# Border mode: add 5mm border around the shape
+python3 generate_irregular_baseplate.py my_shape.png --border
+
+# Border with custom 3.2mm thickness
+python3 generate_irregular_baseplate.py my_shape.png --border=3.2
+
+# Border with height adjustment (+2.5mm taller)
+python3 generate_irregular_baseplate.py my_shape.png --border --borderHeightAdjust=2.5
+
+# Border with negative adjustment (-1.5mm shorter, final height = 1.7mm)
+python3 generate_irregular_baseplate.py my_shape.png --border --borderHeightAdjust=-1.5
+
+# Combine edge and border modes
+python3 generate_irregular_baseplate.py my_shape.png --edge=2 --border=4.5 --borderHeightAdjust=1.0
 ```
 
 ## How It Works
@@ -159,8 +183,10 @@ python3 generate_irregular_baseplate.py my_shape.png --debug
 1. **Image Loading**: The script loads the PNG image and converts it to grayscale
 2. **Thresholding**: Pixels are classified as "inside" (dark, value < threshold) or "outside" (light, value >= threshold)
 3. **Rectangle Decomposition**: A greedy algorithm decomposes the shape into rectangular regions, attempting to minimize the number of baseplates needed
-4. **OpenSCAD Generation**: The script generates an OpenSCAD file with properly positioned `machineblock()` calls for each rectangle
-5. **Debug Mode** (optional): When enabled with `--debug`, each baseplate receives a unique random color. The colors maintain the same saturation and lightness as the default yellow (#EAC645) but vary in hue, making it easy to distinguish individual baseplates in the rendered model
+4. **Edge Processing** (optional): When `--edge` is used, the shape is split into edge and interior regions using morphological erosion with 8-connectivity (ensuring uniform thickness in all directions including diagonals)
+5. **Border Generation** (optional): When `--border` is used, a border is created around the outside of the shape with precise millimeter positioning and sizing. The border uses an optimized merging algorithm to minimize the number of cubes while maintaining exact mm dimensions
+6. **OpenSCAD Generation**: The script generates an OpenSCAD file with properly positioned `machineblock()` calls for baseplates, and `cube()` calls for interior fill and borders
+7. **Debug Mode** (optional): When enabled with `--debug`, each baseplate receives a unique random color. The colors maintain the same saturation and lightness as the default yellow (#EAC645) but vary in hue, making it easy to distinguish individual baseplates in the rendered model
 
 ## Creating Test Images
 
@@ -229,6 +255,35 @@ python3 generate_irregular_baseplate.py test_shape.png -o my_baseplate.scad
 deactivate
 ```
 
+## Advanced Features
+
+### Edge Mode (`--edge`)
+
+Edge mode generates baseplates only on the perimeter of the shape, filling the interior with solid cubes for material efficiency:
+
+- **Thickness**: Specified in brick units (1 brick unit = 8mm)
+- **Algorithm**: Uses morphological erosion with 8-connectivity to ensure uniform thickness in all directions (horizontal, vertical, and diagonal)
+- **Interior Fill**: Automatically fills the interior with optimized cubes (sized in brick units)
+- **Use Case**: Ideal for large shapes where a solid interior saves printing time and material while maintaining structural strength at the edges
+
+### Border Mode (`--border`)
+
+Border mode adds a precise millimeter-based border around the outside of your shape:
+
+- **Precision**: Border thickness and positioning use exact millimeter measurements (not constrained to brick units)
+- **Complete Coverage**: Creates borders on all 8 directions - top, bottom, left, right, and all 4 diagonal corners - ensuring complete perimeter coverage
+- **Algorithm**: Creates border rectangles on each edge and corner of the shape, then merges adjacent rectangles to minimize the number of cubes
+- **Height Control**: Border height defaults to baseplate height (without studs) but can be adjusted with `--borderHeightAdjust`
+- **Independence**: Border dimensions are completely independent of the brick grid system
+- **Use Case**: Perfect for creating frames, mounting flanges, or custom-sized perimeters around your baseplate
+
+### Combining Modes
+
+You can combine `--edge` and `--border` modes to create complex structures:
+- Baseplates on the edge (with studs for connectivity)
+- Solid interior fill (for material efficiency)
+- Precise mm-based border around the outside (for custom mounting or framing)
+
 ## Technical Details
 
 - **Coordinate System**: The script correctly handles coordinate system conversion:
@@ -237,6 +292,8 @@ deactivate
   - The script automatically flips the Y-axis so the rendered model matches the image orientation
 - **Unit Size**: Each brick unit is 8mm (1.6mm × 5 units per the MachineBlocks configuration)
 - **Positioning**: Baseplates are positioned using OpenSCAD's `translate()` function
+- **Border Precision**: Border cubes use floating-point mm coordinates for precise positioning (e.g., 3.2mm, 4.5mm)
+- **Gap Elimination**: All baseplates are generated with `baseSideAdjustment = 0` to eliminate gaps between adjacent pieces
 - **Integration**: The generated script uses the MachineBlocks library's `machineblock()` function with standard configuration parameters
 
 ## About MachineBlocks
