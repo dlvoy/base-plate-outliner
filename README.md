@@ -135,9 +135,10 @@ If no image is specified, it defaults to `image.png`. The output filename is aut
 - `-t, --threshold` - Grayscale threshold (0-255). Pixels darker than this value are considered "inside" the shape (default: 128)
 - `--debug` - Enable debug mode: each baseplate gets a random color with varying hue (useful for visualizing individual baseplates)
 - `--edge [THICKNESS]` - Only generate baseplates on the edge of the shape with specified thickness in brick units (default: 1 if no value given). Interior is filled with solid cubes for efficiency. Value must be >= 1
-- `--border [THICKNESS_MM]` - Add a border around the outside edge of the shape with specified thickness in millimeters (default: 5mm if no value given). Border is created using solid cubes positioned precisely in mm. Value must be != 0
-- `--borderHeightAdjust ADJUST_MM` - Adjust the height of the border in millimeters (default: 0). This adjustment is added to the standard baseplate height (without studs). Can be positive (taller border) or negative (shorter border), but the final height must be > 0 (base height is 3.2mm)
-- `--config CONFIG_PATH` - Path to OpenSCAD config file (default: `machineblocks/config/config-default.scad`). The script reads `unitMbu`, `unitGrid`, and `scale` values from this file to calculate brick dimensions. This ensures consistency between the Python script and the generated OpenSCAD output
+- `--border [THICKNESS_MM]` - Add a border around the outside edge of the shape with specified thickness in millimeters (default: 5mm if no value given). Border is created using solid cubes positioned precisely in mm. Value must be != 0 (unless using --frame mode)
+- `--frame` - Frame mode: Creates a filled rectangular border that encloses the entire shape. In this mode, `--border` specifies the padding (in mm) between the shape's bounding rectangle and the outer frame edge. Padding can be 0 for no gap. The frame fills the area between the shape edges and the outer rectangle
+- `--borderHeightAdjust ADJUST_MM` - Adjust the height of the border/frame in millimeters (default: 0). This adjustment is added to the standard baseplate height (without studs). Can be positive (taller) or negative (shorter), but the final height must be > 0 (base height is 3.2mm)
+- `--config CONFIG_PATH` - Path to OpenSCAD config file (default: `machineblocks/config/config-default.scad`). The script reads `unitMbu`, `unitGrid`, and `scale` values from this file to calculate brick dimensions. This ensures consistency between the Python script and the generated OpenSCAD output. For Nanoblocks (half-size bricks), use `configs/config-nano.scad`
 
 ### Examples
 
@@ -178,8 +179,23 @@ python3 generate_irregular_baseplate.py my_shape.png --border --borderHeightAdju
 # Combine edge and border modes
 python3 generate_irregular_baseplate.py my_shape.png --edge=2 --border=4.5 --borderHeightAdjust=1.0
 
+# Frame mode: rectangular border with no padding (frame touches shape edges)
+python3 generate_irregular_baseplate.py my_shape.png --frame --border=0
+
+# Frame mode with 5mm padding between shape and frame
+python3 generate_irregular_baseplate.py my_shape.png --frame --border=5
+
+# Frame mode with custom padding and height adjustment
+python3 generate_irregular_baseplate.py my_shape.png --frame --border=3 --borderHeightAdjust=2.0
+
+# Combine edge and frame modes
+python3 generate_irregular_baseplate.py my_shape.png --edge=2 --frame --border=4.5
+
 # Use custom OpenSCAD config file
 python3 generate_irregular_baseplate.py my_shape.png --config=my-custom-config.scad
+
+# Generate baseplates for Nanoblocks (half-size bricks)
+python3 generate_irregular_baseplate.py my_shape.png --config=configs/config-nano.scad
 ```
 
 ## How It Works
@@ -281,12 +297,59 @@ Border mode adds a precise millimeter-based border around the outside of your sh
 - **Independence**: Border dimensions are completely independent of the brick grid system
 - **Use Case**: Perfect for creating frames, mounting flanges, or custom-sized perimeters around your baseplate
 
+### Frame Mode (`--frame`)
+
+Frame mode creates a filled rectangular border that encloses the entire shape (requires `--border` to be specified):
+
+- **Rectangular Enclosure**: Creates a frame around the bounding rectangle of the entire shape, not just following the shape's edges
+- **Padding Control**: The `--border` value specifies padding (in mm) between the shape's bounding box and the outer frame edge. Can be 0 for no gap
+- **Area Filling**: Fills the entire rectangular area between the shape edges and the outer frame boundary
+- **Precision**: Uses exact millimeter measurements with 0.1mm resolution for optimal rectangle decomposition
+- **Algorithm**: Identifies the shape's bounding box, expands it by the padding amount, then fills the area between the shape and expanded rectangle using optimized cube decomposition
+- **Height Control**: Frame height works the same as border mode - defaults to baseplate height but can be adjusted with `--borderHeightAdjust`
+- **Use Case**: Ideal for creating mounting plates, enclosures, or providing a flat rectangular base for irregular shapes
+
+**Difference from Border Mode:**
+- **Border**: Follows the shape's edges closely, creating a border that matches the shape's outline
+- **Frame**: Creates a rectangular enclosure around the shape's bounding box, filling gaps to form a complete rectangle
+
 ### Combining Modes
 
-You can combine `--edge` and `--border` modes to create complex structures:
+You can combine `--edge` with either `--border` or `--frame` modes to create complex structures:
 - Baseplates on the edge (with studs for connectivity)
 - Solid interior fill (for material efficiency)
-- Precise mm-based border around the outside (for custom mounting or framing)
+- Precise mm-based border/frame around the outside (for custom mounting or framing)
+
+**Examples:**
+- `--edge=2 --border=5`: Edge baseplates + border following shape outline
+- `--edge=2 --frame --border=3`: Edge baseplates + rectangular frame with 3mm padding
+
+### Nanoblocks Configuration
+
+The project includes a configuration file for generating Nanoblocks, which are half-size versions of standard LEGO-compatible bricks:
+
+- **Config File**: `configs/config-nano.scad`
+- **Scale**: 0.5 (half the size of standard bricks)
+- **Unit Size**: 4mm per brick unit (compared to 8mm for standard bricks)
+- **Usage**: Specify the config file with `--config=configs/config-nano.scad`
+
+**Key Differences from Standard Bricks:**
+- **Dimensions**: All measurements are halved (unitMbu = 1.6mm, unitGrid = [5, 2], scale = 0.5)
+- **Compatibility**: Designed for Nanoblock-compatible brick systems
+- **Image Interpretation**: Each pixel in your input image still represents one brick unit, but the physical size will be 4mm × 4mm instead of 8mm × 8mm
+- **Border/Frame**: All mm-based measurements (--border, --borderHeightAdjust) remain in millimeters and are not affected by the scale
+
+**Example:**
+```bash
+# Generate Nanoblock baseplates from a 20×20 pixel image
+# Result: 80mm × 80mm baseplate (20 pixels × 4mm per Nanoblock unit)
+python3 generate_irregular_baseplate.py my_shape.png --config=configs/config-nano.scad
+
+# Nanoblocks with frame
+python3 generate_irregular_baseplate.py my_shape.png --config=configs/config-nano.scad --frame --border=2
+```
+
+**Note**: The config-nano.scad file was created by Dominik Dzienia based on the standard MachineBlocks config-default.scad.
 
 ## Technical Details
 
@@ -325,13 +388,15 @@ base-plate-outliner/
 │   ├── lib/                    # MachineBlocks library files
 │   ├── config/                 # MachineBlocks configuration
 │   └── ...
+├── configs/                    # Custom configuration files
+│   └── config-nano.scad        # Nanoblocks (half-size) configuration
 ├── generate_irregular_baseplate.py  # Main script
 ├── create_test_image.py        # Test image generator
 ├── example_output.scad         # Example generated output
 ├── setup.sh                    # Linux/Mac setup script
 ├── setup.bat                   # Windows setup script
 ├── requirements.txt            # Python dependencies
-└── README_irregular_baseplate.md    # This file
+└── README.md                   # This file
 ```
 
 ## Limitations

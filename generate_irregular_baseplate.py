@@ -250,6 +250,105 @@ def extract_border_rectangles_mm(mask: np.ndarray, border_thickness_mm: float, u
     return mm_rectangles
 
 
+def extract_frame_rectangles_mm(mask: np.ndarray, padding_mm: float, unit_size: float = 8.0) -> List[Tuple[float, float, float, float]]:
+    """
+    Extract frame region - a filled rectangular border enclosing the entire shape.
+
+    The frame fills the area between:
+    - Inner boundary: the rectangular outline of the shape
+    - Outer boundary: the inner boundary expanded by padding_mm in all directions
+
+    Args:
+        mask: 2D boolean array where True = inside shape (in brick units)
+        padding_mm: Padding between shape outline and frame outer edge in millimeters (can be 0)
+        unit_size: Size of one brick unit in mm (default 8.0)
+
+    Returns:
+        List of rectangles as (x_mm, y_mm, width_mm, height_mm) tuples in millimeters
+    """
+    rows, cols = mask.shape
+
+    # Find the bounding box of the shape in brick units
+    shape_rows, shape_cols = np.where(mask)
+
+    if len(shape_rows) == 0:
+        # Empty shape, no frame
+        return []
+
+    # Bounding box in brick units
+    min_row = shape_rows.min()
+    max_row = shape_rows.max()
+    min_col = shape_cols.min()
+    max_col = shape_cols.max()
+
+    # Convert to mm coordinates
+    # Inner rectangle (shape bounding box)
+    inner_x_mm = min_col * unit_size
+    inner_y_mm = min_row * unit_size
+    inner_width_mm = (max_col - min_col + 1) * unit_size
+    inner_height_mm = (max_row - min_row + 1) * unit_size
+
+    # Outer rectangle (inner + padding)
+    outer_x_mm = inner_x_mm - padding_mm
+    outer_y_mm = inner_y_mm - padding_mm
+    outer_width_mm = inner_width_mm + 2 * padding_mm
+    outer_height_mm = inner_height_mm + 2 * padding_mm
+
+    # Create a high-resolution mask to identify frame region
+    resolution_mm = 0.1
+
+    # Calculate dimensions for high-res grid
+    hr_width = int(np.round(outer_width_mm / resolution_mm))
+    hr_height = int(np.round(outer_height_mm / resolution_mm))
+
+    # Create high-res frame mask (everything inside outer rectangle)
+    hr_frame_mask = np.ones((hr_height, hr_width), dtype=bool)
+
+    # Create high-res shape mask and subtract it from frame
+    hr_shape_mask = np.zeros((hr_height, hr_width), dtype=bool)
+
+    # Map original shape to high-res grid
+    for row in range(rows):
+        for col in range(cols):
+            if mask[row, col]:
+                # Calculate position relative to outer rectangle origin
+                shape_x_mm = col * unit_size - outer_x_mm
+                shape_y_mm = row * unit_size - outer_y_mm
+
+                # Convert to high-res coordinates
+                hr_col_start = int(np.round(shape_x_mm / resolution_mm))
+                hr_row_start = int(np.round(shape_y_mm / resolution_mm))
+                hr_col_end = int(np.round((shape_x_mm + unit_size) / resolution_mm))
+                hr_row_end = int(np.round((shape_y_mm + unit_size) / resolution_mm))
+
+                # Clamp to valid range
+                hr_col_start = max(0, min(hr_width, hr_col_start))
+                hr_col_end = max(0, min(hr_width, hr_col_end))
+                hr_row_start = max(0, min(hr_height, hr_row_start))
+                hr_row_end = max(0, min(hr_height, hr_row_end))
+
+                hr_shape_mask[hr_row_start:hr_row_end, hr_col_start:hr_col_end] = True
+
+    # Frame region is outer rectangle minus shape
+    hr_frame_mask = hr_frame_mask & ~hr_shape_mask
+
+    # Apply greedy rectangle decomposition
+    hr_rectangles = greedy_rectangle_decomposition(hr_frame_mask)
+
+    # Convert high-res rectangles back to mm coordinates (relative to outer rectangle origin)
+    mm_rectangles = []
+    for (hr_col, hr_row, hr_width_px, hr_height_px) in hr_rectangles:
+        # Convert from high-res grid to mm coordinates, offset by outer rectangle position
+        x_mm = outer_x_mm + hr_col * resolution_mm
+        y_mm = outer_y_mm + hr_row * resolution_mm
+        width_mm = hr_width_px * resolution_mm
+        height_mm = hr_height_px * resolution_mm
+
+        mm_rectangles.append((x_mm, y_mm, width_mm, height_mm))
+
+    return mm_rectangles
+
+
 def merge_mm_rectangles(rectangles: List[Tuple[float, float, float, float]]) -> List[Tuple[float, float, float, float]]:
     """
     Merge adjacent mm-based rectangles to minimize the number of cubes.
@@ -428,7 +527,8 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
                             border_thickness_mm: float = 0.0,
                             border_height_adjust_mm: float = 0.0,
                             unit_size: float = 8.0,
-                            config_path: str = "machineblocks/config/config-default.scad") -> None:
+                            config_path: str = "machineblocks/config/config-default.scad",
+                            is_frame_mode: bool = False) -> None:
     """
     Generate an OpenSCAD script that renders the baseplates.
 
@@ -550,17 +650,20 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
             if debug:
                 script_lines.append("}")
 
-    # Generate border cubes if provided (these are in mm coordinates already)
+    # Generate border/frame cubes if provided (these are in mm coordinates already)
     if border_rectangles:
-        script_lines.append("\n// Border (cubes) - positioned and sized in millimeters")
-        script_lines.append(f"// Border thickness: {border_thickness_mm}mm, Height adjustment: {border_height_adjust_mm}mm")
+        mode_label = "Frame" if is_frame_mode else "Border"
+        thickness_label = f"padding: {border_thickness_mm}mm" if is_frame_mode else f"thickness: {border_thickness_mm}mm"
+
+        script_lines.append(f"\n// {mode_label} (cubes) - positioned and sized in millimeters")
+        script_lines.append(f"// {mode_label} {thickness_label}, Height adjustment: {border_height_adjust_mm}mm")
         for i, (x_mm, y_mm, width_mm, height_mm) in enumerate(border_rectangles):
-            # Border rectangles are already in mm, but Y needs flipping for OpenSCAD
+            # Border/frame rectangles are already in mm, but Y needs flipping for OpenSCAD
             # Convert image-space Y (where 0 is top) to OpenSCAD Y (where 0 is bottom)
             translate_x = x_mm
             translate_y = (image_height * unit_size) - y_mm - height_mm
 
-            script_lines.append(f"\n// Border cube {i + 1}: {width_mm:.2f}mm x {height_mm:.2f}mm at position ({x_mm:.2f}mm, {y_mm:.2f}mm)")
+            script_lines.append(f"\n// {mode_label} cube {i + 1}: {width_mm:.2f}mm x {height_mm:.2f}mm at position ({x_mm:.2f}mm, {y_mm:.2f}mm)")
 
             # Wrap with color() if in debug mode
             if debug:
@@ -613,18 +716,21 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
         for size, count in sorted(interior_sizes.items(), key=lambda x: x[1], reverse=True):
             print(f"  {size}: {count} cubes")
 
-    # Print statistics for border cubes if present
+    # Print statistics for border/frame cubes if present
     if border_rectangles:
-        print(f"\nTotal border cubes: {len(border_rectangles)}")
+        mode_label = "frame" if is_frame_mode else "border"
+        thickness_label = "padding" if is_frame_mode else "thickness"
+
+        print(f"\nTotal {mode_label} cubes: {len(border_rectangles)}")
         border_area_mm2 = sum(w * h for _, _, w, h in border_rectangles)
         border_sizes = {}
         for _, _, w, h in border_rectangles:
             size_key = f"{w:.2f}x{h:.2f}mm"
             border_sizes[size_key] = border_sizes.get(size_key, 0) + 1
 
-        print(f"Border thickness: {border_thickness_mm}mm, Height adjustment: {border_height_adjust_mm}mm")
-        print(f"Total area covered by border: {border_area_mm2:.2f} mm²")
-        print("\nBorder cube sizes used (in mm):")
+        print(f"{mode_label.capitalize()} {thickness_label}: {border_thickness_mm}mm, Height adjustment: {border_height_adjust_mm}mm")
+        print(f"Total area covered by {mode_label}: {border_area_mm2:.2f} mm²")
+        print(f"\n{mode_label.capitalize()} cube sizes used (in mm):")
         for size, count in sorted(border_sizes.items(), key=lambda x: x[1], reverse=True):
             print(f"  {size}: {count} cubes")
 
@@ -680,6 +786,11 @@ def main():
         help='Adjustment to border height in mm (default: 0). Added to standard baseplate height without studs. Can be negative to reduce height, but final height must be > 0.'
     )
     parser.add_argument(
+        '--frame',
+        action='store_true',
+        help='Frame mode: Creates a filled rectangular border enclosing the entire shape. With this mode, --border specifies padding between shape outline and frame (can be 0). Frame fills the area between shape edges and outer rectangle.'
+    )
+    parser.add_argument(
         '--config',
         default='machineblocks/config/config-default.scad',
         metavar='CONFIG_PATH',
@@ -709,8 +820,14 @@ def main():
         parser.error("--edge value must be >= 1")
 
     # Validate border thickness if provided
-    if args.border is not None and args.border == 0:
-        parser.error("--border value must be != 0")
+    # In frame mode, border=0 is allowed (means no padding between shape and frame)
+    # In normal border mode, border must be != 0
+    if args.border is not None and args.border == 0 and not args.frame:
+        parser.error("--border value must be != 0 (unless using --frame mode where 0 means no padding)")
+
+    # Validate that --frame requires --border to be specified
+    if args.frame and args.border is None:
+        parser.error("--frame requires --border to be specified (use --border=0 for no padding)")
 
     # Validate border height will be positive
     if args.border is not None:
@@ -750,13 +867,18 @@ def main():
             # Normal mode: all baseplates
             rectangles = greedy_rectangle_decomposition(binary_mask)
 
-        # Step 2b: Generate border if requested
+        # Step 2b: Generate border or frame if requested
         if args.border is not None:
-            print(f"\nBorder mode enabled: border thickness = {args.border}mm")
-
-            # Generate border rectangles directly in mm coordinates
-            border_rectangles = extract_border_rectangles_mm(binary_mask, args.border, unit_size)
-            print(f"Generated {len(border_rectangles)} border rectangles")
+            if args.frame:
+                # Frame mode: filled rectangular border enclosing entire shape
+                print(f"\nFrame mode enabled: padding = {args.border}mm")
+                border_rectangles = extract_frame_rectangles_mm(binary_mask, args.border, unit_size)
+                print(f"Generated {len(border_rectangles)} frame rectangles")
+            else:
+                # Normal border mode: border around shape edges
+                print(f"\nBorder mode enabled: border thickness = {args.border}mm")
+                border_rectangles = extract_border_rectangles_mm(binary_mask, args.border, unit_size)
+                print(f"Generated {len(border_rectangles)} border rectangles")
 
         # Step 3: Generate OpenSCAD script
         print("\nGenerating OpenSCAD script...")
@@ -772,7 +894,8 @@ def main():
             border_thickness_mm=args.border if args.border is not None else 0.0,
             border_height_adjust_mm=args.borderHeightAdjust,
             unit_size=unit_size,
-            config_path=args.config
+            config_path=args.config,
+            is_frame_mode=args.frame
         )
 
         print("\nDone!")
