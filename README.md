@@ -126,29 +126,30 @@ source .venv/bin/activate  # On Linux/Mac
 python3 generate_irregular_baseplate.py [image.png]
 ```
 
-If no image is specified, it defaults to `image.png`.
+If no image is specified, it defaults to `image.png`. The output filename is automatically derived from the input image name (e.g., `my_shape.png` → `my_shape.scad`).
 
 ### Options
 
 - `image` - Path to input PNG image (default: `image.png`)
-- `-o, --output` - Path to output OpenSCAD file (default: `irregular_baseplate.scad`)
+- `-o, --output` - Path to output OpenSCAD file (default: derived from input image name, e.g., `image.png` → `image.scad`)
 - `-t, --threshold` - Grayscale threshold (0-255). Pixels darker than this value are considered "inside" the shape (default: 128)
 - `--debug` - Enable debug mode: each baseplate gets a random color with varying hue (useful for visualizing individual baseplates)
 - `--edge [THICKNESS]` - Only generate baseplates on the edge of the shape with specified thickness in brick units (default: 1 if no value given). Interior is filled with solid cubes for efficiency. Value must be >= 1
 - `--border [THICKNESS_MM]` - Add a border around the outside edge of the shape with specified thickness in millimeters (default: 5mm if no value given). Border is created using solid cubes positioned precisely in mm. Value must be != 0
 - `--borderHeightAdjust ADJUST_MM` - Adjust the height of the border in millimeters (default: 0). This adjustment is added to the standard baseplate height (without studs). Can be positive (taller border) or negative (shorter border), but the final height must be > 0 (base height is 3.2mm)
+- `--config CONFIG_PATH` - Path to OpenSCAD config file (default: `machineblocks/config/config-default.scad`). The script reads `unitMbu`, `unitGrid`, and `scale` values from this file to calculate brick dimensions. This ensures consistency between the Python script and the generated OpenSCAD output
 
 ### Examples
 
 ```bash
-# Use default image.png
+# Use default image.png (generates image.scad)
 python3 generate_irregular_baseplate.py
 
-# Specify custom image
+# Specify custom image (generates my_shape.scad)
 python3 generate_irregular_baseplate.py my_shape.png
 
-# Custom output file
-python3 generate_irregular_baseplate.py my_shape.png -o output.scad
+# Custom output file (overrides default naming)
+python3 generate_irregular_baseplate.py my_shape.png -o custom_output.scad
 
 # Custom threshold (more sensitive to dark pixels)
 python3 generate_irregular_baseplate.py my_shape.png -t 100
@@ -176,6 +177,9 @@ python3 generate_irregular_baseplate.py my_shape.png --border --borderHeightAdju
 
 # Combine edge and border modes
 python3 generate_irregular_baseplate.py my_shape.png --edge=2 --border=4.5 --borderHeightAdjust=1.0
+
+# Use custom OpenSCAD config file
+python3 generate_irregular_baseplate.py my_shape.png --config=my-custom-config.scad
 ```
 
 ## How It Works
@@ -243,11 +247,11 @@ source .venv/bin/activate  # On Linux/Mac
 # 1. Create a test image
 python3 create_test_image.py
 
-# 2. Generate the OpenSCAD script
-python3 generate_irregular_baseplate.py test_shape.png -o my_baseplate.scad
+# 2. Generate the OpenSCAD script (automatically creates test_shape.scad)
+python3 generate_irregular_baseplate.py test_shape.png
 
 # 3. Open in OpenSCAD
-# (Open my_baseplate.scad in OpenSCAD application)
+# (Open test_shape.scad in OpenSCAD application)
 
 # 4. Render and export to STL for 3D printing
 
@@ -290,7 +294,8 @@ You can combine `--edge` and `--border` modes to create complex structures:
   - **Image coordinates**: Y=0 is at the top, Y increases downward
   - **OpenSCAD coordinates**: Y=0 is at the bottom, Y increases upward
   - The script automatically flips the Y-axis so the rendered model matches the image orientation
-- **Unit Size**: Each brick unit is 8mm (1.6mm × 5 units per the MachineBlocks configuration)
+- **Unit Size**: Calculated from OpenSCAD config values: `unitGrid[0] * unitMbu * scale` (default: 5 * 1.6 * 1.0 = 8mm)
+- **Config Integration**: The script parses the OpenSCAD config file to read `unitMbu`, `unitGrid`, and `scale` values, ensuring perfect consistency between Python calculations and OpenSCAD rendering
 - **Positioning**: Baseplates are positioned using OpenSCAD's `translate()` function
 - **Border Precision**: Border cubes use floating-point mm coordinates for precise positioning (e.g., 3.2mm, 4.5mm)
 - **Gap Elimination**: All baseplates are generated with `baseSideAdjustment = 0` to eliminate gaps between adjacent pieces

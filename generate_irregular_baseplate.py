@@ -11,10 +11,91 @@ import sys
 import argparse
 import colorsys
 import random
+import re
+import os
 from PIL import Image
 import numpy as np
 from scipy import ndimage
-from typing import List, Tuple, Set, Optional
+from typing import List, Tuple, Set, Optional, Dict
+
+
+def parse_openscad_config(config_path: str) -> Dict[str, float]:
+    """
+    Parse OpenSCAD config file to extract numeric configuration values.
+
+    Args:
+        config_path: Path to the OpenSCAD config file
+
+    Returns:
+        Dictionary mapping variable names to their values
+
+    Raises:
+        FileNotFoundError: If config file doesn't exist
+        ValueError: If required values cannot be parsed
+    """
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    config = {}
+
+    with open(config_path, 'r') as f:
+        content = f.read()
+
+    # Parse simple variable assignments like: unitMbu = 1.6;
+    # Also handle arrays like: unitGrid = [5, 2];
+
+    # Single value pattern: variable = value;
+    single_pattern = r'^\s*(\w+)\s*=\s*([-+]?[0-9]*\.?[0-9]+)\s*;'
+
+    # Array pattern: variable = [val1, val2];
+    array_pattern = r'^\s*(\w+)\s*=\s*\[\s*([-+]?[0-9]*\.?[0-9]+)\s*,\s*([-+]?[0-9]*\.?[0-9]+)\s*\]\s*;'
+
+    for line in content.split('\n'):
+        # Skip comments
+        if line.strip().startswith('//') or line.strip().startswith('/*') or line.strip().startswith('*'):
+            continue
+
+        # Try array pattern first
+        array_match = re.match(array_pattern, line)
+        if array_match:
+            var_name = array_match.group(1)
+            val1 = float(array_match.group(2))
+            val2 = float(array_match.group(3))
+            config[var_name] = [val1, val2]
+            continue
+
+        # Try single value pattern
+        single_match = re.match(single_pattern, line)
+        if single_match:
+            var_name = single_match.group(1)
+            value = float(single_match.group(2))
+            config[var_name] = value
+
+    # Validate required values
+    required = ['unitMbu', 'unitGrid', 'scale']
+    missing = [req for req in required if req not in config]
+    if missing:
+        raise ValueError(f"Config file missing required values: {', '.join(missing)}")
+
+    return config
+
+
+def calculate_unit_size(config: Dict[str, float]) -> float:
+    """
+    Calculate the size of one brick unit in millimeters from config.
+
+    Args:
+        config: Dictionary with unitMbu, unitGrid, and scale values
+
+    Returns:
+        Size of one brick unit in mm (unitGrid[0] * unitMbu * scale)
+    """
+    unit_grid = config['unitGrid']
+    unit_mbu = config['unitMbu']
+    scale_val = config['scale']
+
+    # unitGrid[0] is the X/Y dimension in MBU units
+    return unit_grid[0] * unit_mbu * scale_val
 
 
 def load_and_threshold_image(image_path: str, threshold: int = 128) -> np.ndarray:
@@ -322,6 +403,21 @@ def generate_random_color(base_color: str = "#EAC645") -> str:
     return hsl_to_hex(random_hue, s, l)
 
 
+def hex_to_openscad_rgb(hex_color: str) -> str:
+    """
+    Convert hex color to OpenSCAD RGB format.
+
+    Args:
+        hex_color: Hex color string (e.g., "#EAC645")
+
+    Returns:
+        OpenSCAD color format string (e.g., "[0.918, 0.776, 0.271]")
+    """
+    hex_color = hex_color.lstrip('#')
+    r, g, b = tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+    return f"[{r:.3f}, {g:.3f}, {b:.3f}]"
+
+
 def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
                             output_path: str = "irregular_baseplate.scad",
                             debug: bool = False,
@@ -329,7 +425,9 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
                             interior_rectangles: Optional[List[Tuple[int, int, int, int]]] = None,
                             border_rectangles: Optional[List[Tuple[float, float, float, float]]] = None,
                             border_thickness_mm: float = 0.0,
-                            border_height_adjust_mm: float = 0.0) -> None:
+                            border_height_adjust_mm: float = 0.0,
+                            unit_size: float = 8.0,
+                            config_path: str = "machineblocks/config/config-default.scad") -> None:
     """
     Generate an OpenSCAD script that renders the baseplates.
 
@@ -348,10 +446,9 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
         border_rectangles: Optional list of rectangles for border cubes as (x_mm, y_mm, width_mm, height_mm) in millimeters
         border_thickness_mm: Thickness of border in mm
         border_height_adjust_mm: Height adjustment for border in mm
+        unit_size: Size of one brick unit in mm (calculated from config)
+        config_path: Path to OpenSCAD config file to include
     """
-    # OpenSCAD uses unitGrid = [5, 2] and unitMbu = 1.6
-    # So each brick unit is 5 * 1.6 = 8mm in X/Y
-    unit_size = 8.0  # mm per brick unit
 
     script_lines = [
         "/**",
@@ -361,7 +458,7 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
         "",
         "// Imports",
         "use <machineblocks/lib/block.scad>;",
-        "include <machineblocks/config/config-default.scad>;",
+        f"include <{config_path}>;",
         "",
     ]
 
@@ -377,10 +474,14 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
         translate_x = x * unit_size
         translate_y = (image_height - y - height) * unit_size
 
-        # Generate color (random if debug mode, otherwise default)
-        base_color = generate_random_color() if debug else "#EAC645"
-
         script_lines.append(f"\n// Baseplate {i + 1}: {width}x{height} at position ({x}, {y})")
+
+        # Wrap with color() if in debug mode
+        if debug:
+            hex_color = generate_random_color()
+            openscad_color = hex_to_openscad_rgb(hex_color)
+            script_lines.append(f"color({openscad_color}) {{")
+
         script_lines.append(f"translate([{translate_x}, {translate_y}, 0]) {{")
         script_lines.append("    machineblock(")
         script_lines.append(f"        size = [{width}, {height}, 1],")
@@ -389,7 +490,6 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
         script_lines.append("        studType = \"solid\",")
         script_lines.append("        studIcon = \"none\",")
         script_lines.append("        pillars = false,")
-        script_lines.append(f"        baseColor = \"{base_color}\",")
         script_lines.append("        ")
         script_lines.append("        // Config parameters")
         script_lines.append("        unitMbu = unitMbu,")
@@ -417,6 +517,10 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
         script_lines.append("    );")
         script_lines.append("}")
 
+        # Close color() wrapper if in debug mode
+        if debug:
+            script_lines.append("}")
+
     # Generate interior cubes if provided
     if interior_rectangles:
         script_lines.append("\n// Interior fill (cubes)")
@@ -426,6 +530,13 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
             translate_y = (image_height - y - height) * unit_size
 
             script_lines.append(f"\n// Interior cube {i + 1}: {width}x{height} at position ({x}, {y})")
+
+            # Wrap with color() if in debug mode
+            if debug:
+                hex_color = generate_random_color()
+                openscad_color = hex_to_openscad_rgb(hex_color)
+                script_lines.append(f"color({openscad_color}) {{")
+
             script_lines.append(f"translate([{translate_x}, {translate_y}, 0]) {{")
             script_lines.append("    cube([")
             script_lines.append(f"        {width} * unitGrid[0] * unitMbu * scale,")
@@ -433,6 +544,10 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
             script_lines.append("        1 * unitGrid[1] * unitMbu * scale")
             script_lines.append("    ]);")
             script_lines.append("}")
+
+            # Close color() wrapper if in debug mode
+            if debug:
+                script_lines.append("}")
 
     # Generate border cubes if provided (these are in mm coordinates already)
     if border_rectangles:
@@ -445,6 +560,13 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
             translate_y = (image_height * unit_size) - y_mm - height_mm
 
             script_lines.append(f"\n// Border cube {i + 1}: {width_mm:.2f}mm x {height_mm:.2f}mm at position ({x_mm:.2f}mm, {y_mm:.2f}mm)")
+
+            # Wrap with color() if in debug mode
+            if debug:
+                hex_color = generate_random_color()
+                openscad_color = hex_to_openscad_rgb(hex_color)
+                script_lines.append(f"color({openscad_color}) {{")
+
             script_lines.append(f"translate([{translate_x:.4f}, {translate_y:.4f}, 0]) {{")
             script_lines.append("    cube([")
             script_lines.append(f"        {width_mm:.4f},  // width in mm")
@@ -452,6 +574,10 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
             script_lines.append(f"        (1 * unitGrid[1] * unitMbu * scale) + {border_height_adjust_mm}  // baseplate height without studs + adjustment")
             script_lines.append("    ]);")
             script_lines.append("}")
+
+            # Close color() wrapper if in debug mode
+            if debug:
+                script_lines.append("}")
 
     # Write the script to file
     with open(output_path, 'w') as f:
@@ -515,8 +641,8 @@ def main():
     )
     parser.add_argument(
         '-o', '--output',
-        default='irregular_baseplate.scad',
-        help='Path to output OpenSCAD file (default: irregular_baseplate.scad)'
+        default=None,
+        help='Path to output OpenSCAD file (default: derived from input image name, e.g., image.png -> image.scad)'
     )
     parser.add_argument(
         '-t', '--threshold',
@@ -552,8 +678,30 @@ def main():
         metavar='ADJUST_MM',
         help='Adjustment to border height in mm (default: 0). Added to standard baseplate height without studs. Can be negative to reduce height, but final height must be > 0.'
     )
+    parser.add_argument(
+        '--config',
+        default='machineblocks/config/config-default.scad',
+        metavar='CONFIG_PATH',
+        help='Path to OpenSCAD config file (default: machineblocks/config/config-default.scad). Values like unitMbu, unitGrid, and scale are read from this file.'
+    )
 
     args = parser.parse_args()
+
+    # Derive output filename from input image if not specified
+    if args.output is None:
+        # Replace extension with .scad
+        base_name = os.path.splitext(args.image)[0]
+        args.output = f"{base_name}.scad"
+
+    # Parse OpenSCAD config file
+    try:
+        config = parse_openscad_config(args.config)
+        unit_size = calculate_unit_size(config)
+        print(f"Using config: {args.config}")
+        print(f"  unitMbu = {config['unitMbu']}, unitGrid = {config['unitGrid']}, scale = {config['scale']}")
+        print(f"  Calculated unit size: {unit_size}mm")
+    except (FileNotFoundError, ValueError) as e:
+        parser.error(f"Config error: {e}")
 
     # Validate edge thickness if provided
     if args.edge is not None and args.edge < 1:
@@ -565,9 +713,8 @@ def main():
 
     # Validate border height will be positive
     if args.border is not None:
-        # Calculate base border height: unitGrid[1] * unitMbu * scale
-        # Using default values: 2 * 1.6 * 1.0 = 3.2mm
-        base_border_height = 2.0 * 1.6 * 1.0  # Default MachineBlocks values
+        # Calculate base border height from config: unitGrid[1] * unitMbu * scale
+        base_border_height = config['unitGrid'][1] * config['unitMbu'] * config['scale']
         final_border_height = base_border_height + args.borderHeightAdjust
         if final_border_height <= 0:
             parser.error(f"Border height would be {final_border_height:.2f}mm (base {base_border_height}mm + adjust {args.borderHeightAdjust}mm). Final height must be > 0.")
@@ -607,7 +754,7 @@ def main():
             print(f"\nBorder mode enabled: border thickness = {args.border}mm")
 
             # Generate border rectangles directly in mm coordinates
-            border_rectangles = extract_border_rectangles_mm(binary_mask, args.border)
+            border_rectangles = extract_border_rectangles_mm(binary_mask, args.border, unit_size)
             print(f"Generated {len(border_rectangles)} border rectangles")
 
         # Step 3: Generate OpenSCAD script
@@ -622,7 +769,9 @@ def main():
             interior_rectangles=interior_rectangles,
             border_rectangles=border_rectangles,
             border_thickness_mm=args.border if args.border is not None else 0.0,
-            border_height_adjust_mm=args.borderHeightAdjust
+            border_height_adjust_mm=args.borderHeightAdjust,
+            unit_size=unit_size,
+            config_path=args.config
         )
 
         print("\nDone!")

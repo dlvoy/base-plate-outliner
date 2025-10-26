@@ -24,3 +24,4 @@ ENV/
 example_output.scad
 irregular_baseplate.scad
 test_shape.png
+tests/*
