@@ -1,0 +1,259 @@
+The <code>text</code> module creates text as a 2D geometric object,
+using fonts installed on the local system or provided as separate font file.
+
+{{requires|2015.03}}
+
+'''Parameters'''
+
+; text : String. The text to generate.
+
+; size : Decimal. The generated text has an ascent (height above the baseline) of approximately this value. Default is 10. Fonts vary and may be a different height, typically slightly smaller. The formula to convert the '''size''' value to "points" is <code>pt = size/3.937</code>, so a '''size''' argument of 3.05 will give about 12pt text, for instance. '''Note:''' if you know a point is 1/72" this may not look right, but point measurements of text are the distance from ascent to descent, not from ascent to baseline as in this case.
+
+; font : String. The name of the font that should be used. This is not the name of the font file, but the logical font name (internally handled by the fontconfig library). This can also include a style parameter, see below. A list of installed fonts & styles can be obtained using the font list dialog (Help -> Font List).
+
+; halign : String. The horizontal alignment for the text. Possible values are "left", "center" and "right". Default is "left".
+
+; valign : String. The vertical alignment for the text. Possible values are "top", "center", "baseline" and "bottom". Default is "baseline".
+
+; spacing : Decimal. Factor to increase/decrease the character spacing. The default value of 1 results in the normal spacing for the font, giving a value greater than 1 causes the letters to be spaced further apart.
+
+; direction: String. Direction of the text flow. Possible values are "ltr" (left-to-right), "rtl" (right-to-left), "ttb" (top-to-bottom) and "btt" (bottom-to-top). Default is "ltr".
+
+; language: String. The language of the text (e.g., "en", "ar", "ch"). Default is "en".
+
+; script: String. The script of the text (e.g., "latin", "arabic", "hani"). Default is "latin".
+
+; $fn: used for subdividing the curved path segments provided by freetype
+
+'''Example'''
+[[File:OpenSCAD text() example.png|thumb|Example 1: Result.]]
+ text("OpenSCAD");
+<br clear="all/>
+
+
+; Notes
+
+To allow specification of particular [[w:Unicode|Unicode]] characters, you can specify them in a string with the following escape codes;
+
+* <tt>\x<em>03&nbsp;&nbsp;&nbsp;&nbsp;</em></tt> - hex char-value (only hex values from <tt>01</tt> to <tt>7f</tt> are supported)
+* <tt>\u<em>0123&nbsp;&nbsp;</em></tt> - Unicode char with 4 hexadecimal digits (note: lowercase <tt>\u</tt>)
+* <tt>\U<em>012345</em></tt> - Unicode char with 6 hexadecimal digits (note: uppercase <tt>\U</tt>)
+
+The null character (NUL) is mapped to the space character (SP).
+  assert(version() == [2019, 5, 0]);
+  assert(ord(" ") == 32);
+  assert(ord("\x00") == 32);
+  assert(ord("\u0000") == 32);
+  assert(ord("\U000000") == 32);
+
+'''Example'''
+ t="\u20AC10 \u263A"; // 10 euro and a smilie
+
+=== Using Fonts & Styles ===
+
+Fonts are specified by their logical font name; in addition a style parameter can be added to select a specific font style like "'''bold'''" or "''italic''", such as:
+
+ font="Liberation Sans:style=Bold Italic"
+
+The font list dialog (available under Help > Font List) shows the font name and the font style for each available font. For reference, the dialog also displays the location of the font file.
+You can drag a font in the font list, into the editor window to use in the text() statement.
+
+[[File:OpenSCAD font list dialog.png|thumb|center|400px|OpenSCAD font list dialog]]
+
+OpenSCAD includes the fonts ''Liberation Mono'', ''Liberation Sans'', <!-- ''Liberation Sans Narrow'' isn't included --> and ''Liberation Serif''. Hence, as fonts in general differ by platform type, use of these included fonts is likely to be portable across platforms. 
+
+For common/casual text usage, the specification of one of these fonts is <strong>recommended</strong> for this reason. Liberation Sans is the default font to encourage this.
+
+
+In addition to the installed fonts ( for windows  only fonts installed as admin for all users ), it's possible to add project specific font files. Supported font file formats are [[:w:TrueType|TrueType]] Fonts (*.ttf) and [[:w:OpenType|OpenType]] Fonts (*.otf). The files need to be registered with use<>.
+
+  use <ttf/paratype-serif/PTF55F.ttf>
+
+After the registration, the font is listed in the font list dialog, so in case logical name of a font is unknown, it can be looked up as it was registered.
+
+OpenSCAD uses fontconfig to find and manage fonts, so it's possible to list the system configured fonts on command line using the fontconfig tools in a format similar to the GUI dialog.
+
+<syntaxhighlight lang="bash">
+$ fc-list -f "%-60{{%{family[0]}%{:style[0]=}}}%{file}\n" | sort
+
+...
+Liberation Mono:style=Bold Italic /usr/share/fonts/truetype/liberation2/LiberationMono-BoldItalic.ttf
+Liberation Mono:style=Bold        /usr/share/fonts/truetype/liberation2/LiberationMono-Bold.ttf
+Liberation Mono:style=Italic      /usr/share/fonts/truetype/liberation2/LiberationMono-Italic.ttf
+Liberation Mono:style=Regular     /usr/share/fonts/truetype/liberation2/LiberationMono-Regular.ttf
+...
+</syntaxhighlight>
+
+Under Windows, fonts are stored in the Windows Registry. To get a file with the font file names, use the command:
+
+<code>reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts" /s > List_Fonts_Windows.txt</code>
+
+
+'''Example'''
+[[File:OpenSCAD text() font style example.png|thumb|Example 2: Result.]]
+  square(10);
+  
+  translate([15, 15]) {
+    text("OpenSCAD", font = "Liberation Sans");
+  }
+  
+  translate([15, 0]) {
+    text("OpenSCAD", font = "Liberation Sans:style=Bold Italic");
+  }
+<br clear="all/>
+
+=== Alignment ===
+
+==== Vertical alignment ====
+
+; top : The text is aligned so the top of the tallest character in your text is at the given Y coordinate.
+
+; center: The text is aligned with the center of the bounding box at the given Y coordinate. This bounding box is based on the actual sizes of the letters, so taller letters and descenders will affect the positioning.
+
+; baseline: The text is aligned with the font baseline at the given Y coordinate. This is the default, and is the only option that makes ''different'' pieces of text align vertically, as if they were written on lined paper, regardless of character heights and descenders.
+
+; bottom: The text is aligned so the bottom of the lowest-reaching character in your text is at the given Y coordinate.
+
+[[File:OpenSCAD text align vertical.png|thumb|OpenSCAD vertical text alignment]]
+  text = "Align";
+  font = "Liberation Sans";
+  
+  valign = [
+    [  0, "top"],
+    [ 40, "center"],
+    [ 75, "baseline"],
+    [110, "bottom"]
+  ];
+  
+  for (a = valign) {
+    translate([10, 120 - a[0], 0]) {
+      color("red") cube([135, 1, 0.1]);
+      color("blue") cube([1, 20, 0.1]);
+      linear_extrude(height = 0.5) {
+        text(text = str(text,"_",a[1]), font = font, size = 20, valign = a[1]);
+      }
+    }
+  }
+<br clear="all/>The <code>text()</code> module doesn't support multi-line text, but you can make a separate call for each line, using <code>translate()</code> to space them. A spacing of 1.4*'''size''' is the minimum required to prevent lines overlapping (if they include descenders). 1.6*'''size''' is approximately the default single-spacing in many word processing programs. To get evenly spaced lines, use "baseline" vertical alignment; otherwise, lines may be lower or higher depending on their contents.
+
+==== Horizontal alignment ====
+
+; left : The text is aligned with the left side of the bounding box at the given X coordinate. This is the default.
+
+; center : The text is aligned with the center of the bounding box at the given X coordinate.
+
+; right : The text is aligned with the right of the bounding box at the given X coordinate.
+
+[[File:OpenSCAD text align horizontal.png|thumb|OpenSCAD horizontal text alignment]]
+  text = "Align";
+  font = "Liberation Sans";
+  
+  halign = [
+    [10, "left"],
+    [50, "center"],
+    [90, "right"]
+  ];
+  
+  for (a = halign) {
+    translate([140, a[0], 0]) {
+      color("red") cube([115, 2,0.1]);
+      color("blue") cube([2, 20,0.1]);
+      linear_extrude(height = 0.5) {
+        text(text = str(text,"_",a[1]), font = font, size = 20, halign = a[1]);
+      }
+    }
+  }
+<br clear="all/>
+
+=== 3D text ===
+[[File:Openscad Text 3dText.jpg|thumb|3D text example]]
+
+Text can be changed from a 2 dimensional object into a 3D object by using [[OpenSCAD User Manual/2D to 3D Extrusion#Linear_Extrude|linear_extrude]].
+
+ //3d Text Example
+ linear_extrude(4)
+     text("Text");
+
+== Metrics ==
+{{requires|Development snapshot}}
+
+=== textmetrics() ===
+
+The <code>textmetrics()</code> function accepts the same parameters as <code>text()</code>, and returns an [[OpenSCAD_User_Manual/General#Objects|object]] describing how the text would be rendered.
+
+The returned object has these members:
+* '''position''': the position of the lower-left corner of the generated text.
+* '''size''': the size of the generated text.
+* '''ascent''': the amount that the text extends above the baseline.
+* '''descent''': the amount that the text extends below the baseline.
+* '''offset''': the lower-left corner of the box containing the text, including inter-glyph spacing before the first glyph.
+* '''advance''': the "other end" of the text, the point at which additional text should be positioned.
+
+    s = "Hello, World!";
+    size = 20;
+    font = "Liberation Serif";
+    
+    tm = textmetrics(s, size=size, font=font);
+    echo(tm);
+    translate([0,0,1]) text("Hello, World!", size=size, font=font);
+    color("black") translate(tm.position) square(tm.size);
+
+yields (reformatted for readability):
+
+[[File:OpenSCAD textmetrics.png|thumb|Using textmetrics() to draw a box around text]]
+
+    ECHO: {
+        position = [0.7936, -4.2752];
+        size = [149.306, 23.552];
+        ascent = 19.2768;
+        descent = -4.2752;
+        offset = [0, 0];
+        advance = [153.09, 0];
+    }
+
+=== fontmetrics() ===
+
+The <code>fontmetrics()</code> function accepts a font size and a font name, both optional, and returns an [[OpenSCAD_User_Manual/General#Objects|object]] describing global characteristics of the font.
+
+'''Parameters'''
+
+; size : Decimal, optional.  The size of the font, as described above for <code>text()</code>.
+
+; font : String, optional. The name of the font, as described above for <code>text()</code>.
+
+Note that omitting the size and/or font may be useful to get information about the default font.
+
+Returns an object:
+* '''nominal''': usual dimensions for a glyph:
+** '''ascent''': height above the baseline
+** '''descent''': depth below the baseline
+* '''max''': maximum dimensions for a glyph:
+** '''ascent''': height above the baseline
+** '''descent''': depth below the baseline
+* '''interline''': design distance from one baseline to the next
+* '''font''': identification information about the font:
+** '''family''': the font family name
+** '''style''': the style (Regular, Italic, et cetera)
+
+    echo(fontmetrics(font="Liberation Serif"));
+
+yields (reformatted for readability):
+
+    ECHO: {
+        nominal = {
+            ascent = 12.3766;
+            descent = -3.0043;
+        };
+        max = {
+            ascent = 13.6312;
+            descent = -4.2114;
+        };
+        interline = 15.9709;
+        font = {
+            family = "Liberation Serif";
+            style = "Regular";
+        };
+    }
+
+
+{{BookCat}}

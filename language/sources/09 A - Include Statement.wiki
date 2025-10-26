@@ -1,0 +1,130 @@
+For including code from external files in OpenSCAD, there are two commands available:
+
+* '''<code>include <''filename''></code>''' acts as if the contents of the included file were written in the including file, and
+* '''<code>use <''filename''></code>''' imports modules and functions, but does not execute any commands other than those definitions.
+
+Library files are searched for in the same folder as the design was opened from, in the library folder of the OpenSCAD installation, and in folders given by the OPENSCADPATH environment variable. You can use a relative path specification to either. If they lie elsewhere you must give the complete path.
+Newer versions have predefined user libraries, see the [[OpenSCAD_User_Manual/Libraries]] page, which also documents a number of library files included in OpenSCAD.
+
+Wildcards (e.g. '''<code>include <MCAD/*.scad></code>''') can '''not''' be used to include multiple files.
+
+== <code>include <''filename''></code> ==
+
+When file '''A''' includes file '''B''', it is almost exactly as if '''B''' was dropped at that point in '''A'''.  Everything in '''B''' is visible to '''A''', and everything in '''A''' is visible to '''B'''.
+
+=== Variables in included files ===
+
+Generally, a particular instance of an OpenSCAD variable has only one value; it cannot be set to one value and then reset to another value.  Attempting to change the value of a variable triggers a warning; if the warning is ignored then the last value assigned is used throughout its entire life.  (See the [[OpenSCAD User Manual/General#Variables | Variables]] section for more information.)
+
+Inclusion is a special exception to this rule.  If included file '''B''' defines a variable, and main file '''A''' subsequently assigns a value to it, the warning that would normally be triggered is suppressed; the definition from file '''A''' is used throughout the life of the variable.
+
+This behavior allows a library file to define a default value for a variable, and the main file to override that default.
+
+'''B.scad'''
+ v = 1;
+
+'''A.scad'''
+ include <B.scad>
+ v = 5;
+ echo(v=v);
+ 
+Produces the following without any warning:
+
+ ECHO: v = 5
+
+==== Caution:  Order of Execution ====
+The assignment by '''A''' is executed as if it was located at the original assignment in '''B'''.  This can be an issue if the expression is dependent on other variables.
+
+'''B.scad'''
+ a = 1;
+ b = 2;
+'''A.scad'''
+ include <B.scad>
+ a = b + 1;
+ echo(a=a, b=b);
+
+fails, producing
+
+ WARNING: Ignoring unknown variable "b" in file a.scad, line 2
+ WARNING: undefined operation (undefined + number) in file a.scad, line 2
+ ECHO: a = undef, b = 2
+
+== <code>var = include <''filename''>;</code> ==
+Because <code>include</code> is functionally equivalent to dropping an included file into the spot in the parent file where the <code>include</code> statement appeared (replacing the <code>include</code> statement with the new file) it is possible to assign data in an external file to a local variable name.
+
+For example, suppose the file data.txt contains a comma-delimited list of numbers:
+ 8, 6, 3, 8, 6, 4, 5, 99, 8, 1, 3, 5
+
+Then in OpenSCAD, putting the <code>include</code> inside array brackets imports the data as an OpenSCAD array:
+ numlist = [ include <data.txt> ];
+ echo(numlist);
+produces:
+ ECHO: [8, 6, 3, 8, 6, 4, 5, 99, 8, 1, 3, 5]
+One would think that it's possible to import CSV data in a similar fashion, by knowing the number of columns in the CSV file in advance, and split the array into a list of row arrays, but this wouldn't work. CSV allows for empty data between commas, which are ignored by OpenSCAD, causing differences in the lengths of each row. It is best to preprocess a CSV file into a more compatible format before including it.
+
+Another example: suppose the file cube.poly contains an array describing a [[OpenSCAD User Manual/Primitive Solids#polyhedron|polyhedron]] for a cube, with a list of 8 vertices followed by a list of 6 faces.
+ [
+     [ // vertices
+         [37.5,67.5,0], [37.5,42.5,0], [12.5,42.5,0], [12.5,67.5,0],
+         [37.5,67.5,25], [12.5,67.5,25], [12.5,42.5,25], [37.5,42.5,25]
+     ],
+     [ // faces
+         [3,2,1,0], [7,6,5,4], [1,7,4,0], [2,6,7,1], [3,5,6,2], [5,3,0,4]
+     ]
+ ]
+Because <code>include</code> replaces itself with the included file, one can assign the include to a variable name:
+ cube_poly = include <cube.poly>;
+ vertices = cube_poly[0];
+ faces = cube_poly[1];
+ polyhedron(vertices, faces);
+When using this trick to assign the contents of an included file to a variable name, avoid doing this with .scad files. Your data files should have some other extension, because the included file should contain data rather than OpenSCAD source code.
+
+== <code>use <''filename''></code> ==
+
+When file '''A''' uses file '''B''':
+* A can see B's modules and functions.
+* A cannot see B's global variables.
+* B cannot see A's global variables.
+* B cannot see A's modules and functions.
+* B's top-level module invocations are not executed.
+* B's top-level assignments are executed on every call from '''A''' to '''B'''.  (This can be useful if they are dependent on $ variables defined by '''A''', or can be a performance problem.)  (It is controversial whether this is a bug or a feature; use caution and be prepared for change.)
+
+<code>use <''filename''></code> is allowed only at the top level of a  file.
+
+== Example "Ring Library" ==
+A library file for generating rings might look like this:
+
+'''ring.scad:'''
+
+ module ring(r1, r2, h) {
+     difference() {
+         cylinder(r = r1, h = h);
+         translate([ 0, 0, -1 ]) cylinder(r = r2, h = h+2);
+     }
+ }
+ 
+ ring(5, 4, 10);
+
+Including the library using
+
+ include <ring.scad>
+ rotate([90, 0, 0]) ring(10, 1, 1);
+
+would result in the example ring being shown in addition to the rotated ring, but
+
+ use <ring.scad>
+ rotate([90, 0, 0]) ring(10, 1, 1);
+
+shows only the rotated ring.
+
+== Additional Notes ==
+
+==== Directory separators ====
+
+Windows and Linux/Mac use different separators for directories. Windows uses '''\''', e.g. '''<code>directory\file.ext</code>''', while the others use '''/''', e.g. '''<code>directory/file.ext</code>'''. This could lead to cross platform issues. However OpenSCAD on Windows correctly handles the use of '''/''', so using '''/''' in all '''include''' or '''use''' statements works on all platforms.
+
+==== Nested Include and Use ====
+
+OpenSCAD executes nested calls to '''include''' and '''use'''. There is one caveat to this, that '''use''' brings functions and modules only into the local file context. As a result, nested calls to '''use''' have no effect on the environment of the base file; the child '''use''' call works in the parent '''use''' context, but the modules and functions so imported fall out of context before they are seen by the base context.
+
+{{BookCat}}

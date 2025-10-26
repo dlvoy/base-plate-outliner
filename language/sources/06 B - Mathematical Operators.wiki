@@ -1,0 +1,228 @@
+{{incomplete}}
+
+== Scalar arithmetic operators ==
+
+The scalar arithmetic operators take numbers as operands and produce a new number.
+
+{| class="wikitable"
+|&#43;
+|add
+|-
+|&#45;
+|subtract
+|-
+|*
+|multiply
+|-
+|/
+|divide
+|-
+|%
+|modulo
+|-
+|^
+|exponent {{requires|2021.01}}
+|}
+
+The <code>-</code> can also be used as prefix operator to negate a number.
+
+Prior to version 2021.01, the builtin mathematical function <code>[[OpenSCAD User Manual/Mathematical Functions#pow|pow()]]</code> is used instead of the <code>^</code> exponent operator.
+
+: '''Example:'''
+<syntaxhighlight lang="javascript">
+a=[ for(i=[0:10]) i%2 ];
+echo(a);//ECHO: [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
+</syntaxhighlight>
+A number modulo 2 is zero if even and one if odd.
+
+== Binary arithmetic ==
+{{requires|Development snapshot}}
+
+{| class="wikitable"
+|&#124;
+|OR
+|-
+|&amp;
+|AND
+|-
+|<<
+|Left shift
+|-
+|>>
+|Right shift (sign preserving)
+|-
+|~
+|Unary NOT
+|}
+Numbers are converted to 64-bit signed integers for binary arithmetic, and then converted back.  Note that OpenSCAD numbers have 53 bits of precision; binary arithmetic exceeding 2^53 will be imprecise.
+
+== Relational operators ==
+
+Relational operators produce a boolean result from two operands.
+
+{| class="wikitable"
+|<
+|less than
+|-
+|<=
+|less or equal
+|-
+|==
+|equal
+|-
+|!=
+|not equal
+|-
+|>=
+|greater or equal
+|-
+|>
+|greater than
+|}
+
+If both operands are simple numbers, the meaning is self-evident.  
+
+If both operands are strings, alphabetical sorting determines 
+equality and order.  E.g., "ab" > "aa" > "a".  
+
+If both operands are Booleans, ''true'' > ''false''.  In an inequality comparison between a Boolean 
+and a number ''true'' is treated as 1 and ''false'' is treated as 0.  Other inequality tests involving Booleans 
+return false.    
+
+If both operands are vectors, an equality test returns ''true'' when the vectors are identical and ''false'' otherwise.  
+Inequality tests involving one or two vectors always return ''false'', so for example [1] < [2] is ''false''.  
+
+Dissimilar types always test as unequal with '==' and '!='.   
+Inequality comparisons between dissimilar types, except for Boolean and numbers as noted above, always result in ''false''.  
+Note that [1] and 1 are different types so [1] == 1 is false.  
+
+<code>undef</code> doesn't equal anything but ''undef''.  Inequality comparisons involving ''undef'' result in ''false''.
+
+<code>nan</code> doesn't equal anything (not even itself) and inequality tests all produce ''false''.  See [[OpenSCAD_User_Manual/General#Numbers|Numbers]].
+
+== Logical operators ==
+
+All logical operators take Booleans as operands and produce a Boolean.  
+Non-Boolean quantities are converted to Booleans before the operator is evaluated. 
+
+{| class="wikitable"
+|&&
+| logical AND
+|-
+|&#124;&#124;
+| logical OR
+|-
+|!
+| logical unary NOT
+|-
+|}
+
+Since <code>[false]</code> is <code>true</code>, <code>false || [false]</code> is also <code>true</code>.
+
+Logical operators deal with vectors differently than relational operators:
+
+<code>[1, 1] > [0, 2]</code> is <code>false</code>, but 
+
+<code>[false, false] && [false, false]</code> is <code>true</code>.
+
+== Conditional operator ==
+
+The <tt>?:</tt> operator can be used to conditionally evaluate one or another expression.
+It works like the <tt>?:</tt> operator from the family of C-like programming languages.
+
+{| class="wikitable"
+|&nbsp;?&nbsp;:
+|Conditional operator
+|}
+{| width="75%"
+|'''Usage Example:'''
+|-
+|
+<syntaxhighlight lang="javascript">
+a=1;
+b=2;
+c= a==b ? 4 : 5;
+</syntaxhighlight>
+If a equals b, then c is set to 4, else c is set to 5.
+<br>
+The part "a==b" must be something that evaluates to a boolean value.
+|}
+
+==  Vector-number operators ==
+
+The vector-number operators take a vector and a number as operands and produce a new vector.
+{| class="wikitable"
+|*
+|multiply all vector elements by number
+|-
+|/
+|divide all vector elements by number
+|}
+
+: '''Example'''
+ L = [1, [2, [3, "a"] ] ];
+ echo(5*L);
+ // ECHO: [5, [10, [15, undef]]]
+
+== Vector operators ==
+
+The vector operators take vectors as operands and produce a new vector.
+{| class="wikitable"
+|&#43;
+|add element-wise
+|-
+|&#45;
+|subtract element-wise
+|}
+
+The <code>-</code> can also be used as prefix operator to element-wise negate a vector.
+
+: '''Example'''
+ L1 = [1, [2, [3, "a"] ] ];
+ L2 = [1, [2, 3] ];
+ echo(L1+L1); // ECHO: [2, [4, [6, undef]]]
+ echo(L1+L2); // ECHO: [2, [4, undef]]
+Using + or - with vector operands of different sizes produce a result vector that is the size of the smaller vector.
+
+== Vector dot-product operator ==
+
+If both operands of multiplication are simple vectors, the result is a number according to the linear algebra rule for [[w:Dot_product|dot product]].  
+<code>c = u*v;</code> results in <math>c = \sum u_iv_i</math>.  If the operands' sizes don't match, the result is <code>undef</code>.
+
+{{BookCat}}
+
+== Matrix multiplication ==
+
+If one or both operands of multiplication are matrices, the result is a simple vector or matrix according to the linear algebra rules for [[w:Matrix_multiplication#Matrix_product_.28two_matrices.29|matrix product]].  
+In the following, {{math|A, B, C...}} are matrices, {{math|u, v, w...}} are vectors.  Subscripts {{math|i, j}} denote element indices.  
+
+For {{math|A}} a matrix of size {{math|n × m}} and 
+{{math|B}} a matrix of size {{math|m × p}}, their product
+<code>C = A*B;</code> is a matrix of size {{math|n × p}} with elements
+
+<math>C_{ij} = \sum_{k=0}^{m-1} A_{ik}B_{kj}</math>.
+
+<code>C = B*A;</code> results in <code>undef</code> unless {{math|n}} = {{math|p}}.
+
+For {{math|A}} a matrix of size {{math|n × m}} and 
+{{math|v}} a vector of size {{math|m}}, their product
+<code>u = A*v;</code> is a vector of size {{math|n}} with elements
+
+<math>u_{i} = \sum_{k=0}^{m-1} A_{ik}v_{k}</math>. 
+
+In linear algebra, this 
+is the [[w:Matrix_multiplication#Square_matrix_and_column_vector|product of a matrix and a column vector]].
+
+For {{math|v}} a vector of size {{math|n}} and 
+{{math|A}} a matrix of size {{math|n × m}}, their product
+<code>u = v*A;</code> is a vector of size {{math|m}} with elements
+
+<math>u_{j} = \sum_{k=0}^{n-1} v_{k}A_{kj}</math>. 
+
+In linear algebra, this 
+is the product of a row vector and a matrix.
+
+Matrix multiplication is not commutative: <math>AB \neq BA</math>,  <math>Av \neq vA</math>.
+
+
+{{BookCat}}

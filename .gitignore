@@ -1,0 +1,26 @@
+.DS_Store
+
+cli/build
+__pycache__
+*.egg-info
+
+# Python virtual environment for irregular baseplate generator
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# AI 
+.claude
+.vibes
+
+# Generated files from irregular baseplate generator
+example_output.scad
+irregular_baseplate.scad
+test_shape.png

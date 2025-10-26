@@ -1,0 +1,221 @@
+> **Note:** This section is incomplete.
+
+[Extrusion](https://en.wikipedia.org/wiki/Extrusion) is the process of creating an object with a fixed cross-sectional profile.  OpenSCAD provides two commands to create 3D solids from a 2D shape: linear_extrude() and rotate_extrude(). Linear extrusion is similar to pushing Playdoh through a press with a die of a specific shape. 
+![Playdoh.jpg](images/Playdoh.jpg)
+
+Rotational extrusion is similar to the process of [turning](https://en.wikipedia.org/wiki/Turning) or "throwing" a bowl on the [Potter's wheel](https://en.wikipedia.org/wiki/Potter's_wheel).
+![Potter_in_Rabka_04.JPG](images/Potter_in_Rabka_04.JPG)
+
+Both extrusion methods work on a (possibly disjointed) 2D shape which exists on the X-Y plane. While transformations that operates on both 2D shapes and 3D solids can move a shape off the X-Y plane, when the extrusion is performed the end result is not very intuitive.  What actually happens is that any information in the third coordinate (the Z coordinate) is ignored for any 2D shape, this process amounts to an implicit [projection()](OpenSCAD_User_Manual/3D_to_2D_Projection) performed on any 2D shape before the extrusion is executed.  It is recommended to perform extrusion on shapes that remains strictly on the X-Y plane.
+
+### linear_extrude
+Linear Extrusion is an operation that takes a 2D object as input and generates a 3D object as a result. 
+
+Extrusion follows the **V** vector which defaults to the **Z** axis, for specifying a custom value a version > 2021.01 is needed. 
+
+In OpenSCAD Extrusion is always performed on the projection (shadow) of the 2d object xy plane; so if you rotate or apply other transformations to the 2d object before extrusion, its shadow shape is what is extruded. 
+
+Although the extrusion is linear along the **V** vector, a twist parameter is available that causes the object to be rotated around the **V** vector as it is extruding upward. This can be used to rotate the object at its center, as if it is a spiral pillar, or produce a helical extrusion around the **V** vector, like a pig's tail.
+
+A scale parameter is also included so that the object can be expanded or contracted over the extent of the extrusion, allowing extrusions to be flared inward or outward.
+
+#### Usage
+ linear_extrude(height = 5, v = [0, 0, 1], center = true, convexity = 10, twist = -fanrot, slices = 20, scale = 1.0, $fn = 16) {...}
+You must use parameter names due to a backward compatibility issue.
+  **height** : The extrusion height.
+  **center** : If true, the solid is centered after extrusion.
+  **twist** : The extrusion twist in degrees.
+  **scale** : Scales the 2D shape by this value over the height of the extrusion.
+  **slices** : Similar to special variable $fn without being passed down to the child 2D shape.
+  **segments** : Similar to slices but adding points on the polygon's segments without changing the polygon's shape.
+   **convexity** : If parts of the model appear to be transparent, it may be because the preview needs a hint about the shape and you need to set the [convexity parameter](OpenSCAD_User_Manual/FAQ#Why_are_some_parts_(e.g._holes)_of_the_model_not_rendered_correctly?).  10 is a good value to try.
+
+`height` must be positive.
+
+`v` is a 3D vector that must point into positive Z direction > **Requires:** Development snapshot
+
+`$fn` is optional and specifies the resolution of the linear_extrude (higher number brings more "smoothness", but more computation time is needed).
+
+If the extrusion fails for a non-trivial 2D shape, try setting the convexity parameter (the default is not 10, but 10 is a "good" value to try). See explanation further down.
+
+#### Twist
+Twist is the number of degrees of through which the shape is extruded. Setting the parameter twist = 360 extrudes through one revolution. The twist direction follows the left hand rule.
+
+![Openscad_linext_01.jpg](images/Openscad_linext_01.jpg)
+
+**0&deg; of Twist**
+ linear_extrude(height = 10, center = true, convexity = 10, twist = 0)
+ translate([2, 0, 0])
+ circle(r = 1);
+![Openscad_linext_02.jpg](images/Openscad_linext_02.jpg)
+
+**-100&deg; of Twist**
+ linear_extrude(height = 10, center = true, convexity = 10, twist = -100)
+ translate([2, 0, 0])
+ circle(r = 1);
+![Openscad_linext_03.jpg](images/Openscad_linext_03.jpg)
+
+**100&deg; of Twist**
+ linear_extrude(height = 10, center = true, convexity = 10, twist = 100)
+ translate([2, 0, 0])
+ circle(r = 1);
+
+![Openscad_linext_04.jpg](images/Openscad_linext_04.jpg)
+
+**-500&deg; of Twist**
+ linear_extrude(height = 10, center = true, convexity = 10, twist = -500)
+ translate([2, 0, 0])
+ circle(r = 1);
+
+#### Center
+It is similar to the parameter center of cylinders. If `center` is false the linear extrusion Z range is from 0 to height; if it is true, the range is from -height/2 to height/2.
+
+![Openscad_linext_04.jpg](images/Openscad_linext_04.jpg)
+
+**center = true**
+ linear_extrude(height = 10, center = true, convexity = 10, twist = -500)
+ translate([2, 0, 0])
+ circle(r = 1);
+
+![Openscad_linext_05.jpg](images/Openscad_linext_05.jpg)
+
+**center = false**
+ linear_extrude(height = 10, center = false, convexity = 10, twist = -500)
+ translate([2, 0, 0])
+ circle(r = 1);
+
+#### Mesh Refinement
+The slices parameter defines the number of intermediate points along the Z axis of the extrusion. Its default increases with the value of twist. Explicitly setting slices may improve the output refinement. Additional the segments parameter adds vertices (points) to the extruded polygon resulting in smoother twisted geometries. Segments need to be a multiple of the polygon's fragments to have an effect (6 or 9..  for a circle($fn=3), 8,12.. for a square() ).
+
+![Openscad_linext_06.jpg](images/Openscad_linext_06.jpg)
+
+ linear_extrude(height = 10, center = false, convexity = 10, twist = 360, slices = 100)
+ translate([2, 0, 0])
+ circle(r = 1);
+
+The [special variables](OpenSCAD User Manual/Other Language Features) $fn, $fs and $fa can also be used to improve the output. If slices is not defined, its value is taken from the defined $fn value.
+
+![Openscad_linext_07.jpg](images/Openscad_linext_07.jpg)
+
+ linear_extrude(height = 10, center = false, convexity = 10, twist = 360, $fn = 100)
+ translate([2, 0, 0])
+ circle(r = 1);
+
+#### Scale
+Scales the 2D shape by this value over the height of the extrusion. Scale can be a scalar or a vector:
+
+  linear_extrude(height = 10, center = true, convexity = 10, scale=3)
+  translate([2, 0, 0])
+  circle(r = 1);
+
+![Openscad linext 09.png](images/Openscad linext 09.png)
+
+  linear_extrude(height = 10, center = true, convexity = 10, scale=[1,5], $fn=100)
+  translate([2, 0, 0])
+  circle(r = 1);
+
+![OpenScad linear extrude scale example2.png](images/OpenScad linear extrude scale example2.png)
+
+Note that if scale is a vector, the resulting side walls may be nonplanar.  Use `twist=0` and the `slices` parameter to avoid [https://github.com/openscad/openscad/issues/1341 asymmetry].
+
+  linear_extrude(height=10, scale=[1,0.1], slices=20, twist=0)
+  polygon(points=[[0,0],[20,10],[20,-10]]);
+
+### Using with imported SVG
+A common usage of linear_extrude() is to import a 2D svg
+
+  linear_extrude(height = 10, center = true)
+  import("knight.svg");
+
+### rotate_extrude
+Rotational extrusion spins a 2D shape around the Z-axis to form a solid which has rotational symmetry.  One way to think of this operation is to imagine a Potter's wheel placed on the X-Y plane with its axis of rotation pointing up towards +Z.  Then place the to-be-made object on this virtual Potter's wheel (possibly extending down below the X-Y plane towards -Z). The to-be-made object is the cross-section of the object on the X-Y plane (keeping only the right half, X >= 0).  That is the 2D shape that will be fed to rotate_extrude() as the child in order to generate this solid.  Note that the object started on the X-Y plane but is tilted up (rotated +90 degrees about the X-axis) to extrude. 
+
+Since a 2D shape is rendered by OpenSCAD on the X-Y plane, an alternative way to think of this operation is as follows: spins a 2D shape around the Y-axis to form a solid.  The resultant solid is placed so that its axis of rotation lies along the Z-axis.  
+
+Just like the linear_extrude, the extrusion is always performed on the projection of the 2D polygon to the XY plane. 
+Transformations like rotate, translate, etc. applied to the 2D polygon before extrusion modify the projection of the 2D polygon to the XY plane and therefore also modify the appearance of the final 3D object.
+
+* A translation in Z of the 2D polygon has no effect on the result (as also the projection is not affected). 
+* A translation in X increases the diameter of the final object. 
+* A translation in Y results in a shift of the final object in Z direction. 
+* A rotation about the X or Y axis distorts the cross section of the final object, as also the projection to the XY plane is distorted.
+
+Don't get confused, as OpenSCAD displays 2D polygons with a certain height in the Z direction, so the 2D object (with its height) appears to have a bigger projection to the XY plane. 
+But for the projection to the XY plane and also for the later extrusion only the base polygon without height is used. 
+
+You cannot use rotate_extrude to produce a helix or screw thread. Doing this properly can be difficult, so it's best to find a thread library to make them for you.
+
+The 2D shape **must** lie completely on either the right (recommended) or the left side of the Y-axis.  More precisely speaking, **every** vertex of the shape must have either x >= 0 or x <= 0.  If the shape spans the X axis a warning appears in the console windows and the rotate_extrude() is ignored. If the 2D shape touches the Y axis, i.e. at x=0, it **must** be a line that touches, not a point, as a point results in a zero thickness 3D object, which is invalid and results in a CGAL error. For OpenSCAD versions prior to 2016.xxxx, if the shape is in the negative axis the resulting faces are oriented inside-out, which may cause undesired effects.
+
+#### Usage
+ rotate_extrude(angle = 360, start=0, convexity = 2) {...}
+![Right-hand grip rule.svg](images/Right-hand grip rule.svg)
+In 2021.01 and previous, you must use parameter names due to a backward compatibility issue.
+   **angle**  > **Requires:** 2019.05 : Defaults to 360. Specifies the number of degrees to sweep, starting at the positive X axis.  The direction of the sweep follows the [ Right Hand Rule](wikipedia:right-hand rule), hence a negative angle sweeps clockwise.
+   **start** > **Requires:** Development snapshot : Defaults to 0 if **angle** is specified, and 180 if not.  Specifies the starting angle of the extrusion, counter-clockwise from the positive X axis.
+   **convexity** : If parts of the model appear to be transparent, it may be because the preview needs a hint about the shape and you need to set the [convexity parameter](OpenSCAD_User_Manual/FAQ#Why_are_some_parts_(e.g._holes)_of_the_model_not_rendered_correctly?).  10 is a good value to try.
+The [standard circular-resolution variables](OpenSCAD_User_Manual/Other_Language_Features#Circle_resolution:_$fa,_$fs,_and_$fn) control the number of fragments used in the extrusion:
+   **$fa** : minimum angle (in degrees) of each fragment.
+   **$fs** : minimum circumferential length of each fragment.
+   **$fn** : **fixed** number of fragments in 360 degrees. Values of 3 or more override $fa and $fs.
+
+#### Examples
+A simple torus can be constructed using a rotational extrude.
+ rotate_extrude(convexity = 10)
+     translate([2, 0, 0])
+         circle(r = 1);
+
+![Rotate extrude wiki 2D.jpg](images/Rotate extrude wiki 2D.jpg)<big><big>→</big></big>![Openscad_rotext_01.jpg](images/Openscad_rotext_01.jpg)
+
+#### Mesh Refinement
+Increasing the number of fragments composing the 2D shape improves the quality of the mesh, but takes longer to render.
+ rotate_extrude(convexity = 10)
+     translate([2, 0, 0])
+         circle(r = 1, $fn = 100);
+![Rotate extrude wiki 2D C.jpg](images/Rotate extrude wiki 2D C.jpg)<big><big>→</big></big>![Openscad_rotext_02.jpg](images/Openscad_rotext_02.jpg)
+
+The number of fragments used by the extrusion can also be increased.
+ rotate_extrude(convexity = 10, $fn = 100)
+     translate([2, 0, 0])
+         circle(r = 1, $fn = 100);
+![Rotate extrude wiki 2D C.jpg](images/Rotate extrude wiki 2D C.jpg)<big><big>→</big></big>![Openscad_rotext_03.jpg](images/Openscad_rotext_03.jpg)
+
+#### Extruding a Polygon
+Extrusion can also be performed on polygons with points chosen by the user. 
+
+Here is a simple polygon and its 200 step rotational extrusion. (Note it has been rotated 90 degrees to show how the rotation appears; the `rotate_extrude()` needs it flat).
+ rotate([90,0,0])        polygon( points=[[0,0],[2,1],[1,2],[1,3],[3,4],[0,5]] );
+
+ rotate_extrude($fn=200) polygon( points=[[0,0],[2,1],[1,2],[1,3],[3,4],[0,5]] );
+![Rotate extrude wiki 2D B.jpg](images/Rotate extrude wiki 2D B.jpg)<big><big><big>→</big></big></big>![Openscad polygon extrusion 1.png](images/Openscad polygon extrusion 1.png)<big><big><big>→</big></big></big>![Openscad polygon extrusion 2.png](images/Openscad polygon extrusion 2.png)
+
+For more information on polygons, please see: [2D Primitives: Polygon](OpenSCAD_User_Manual/2D_Primitives#polygon).
+
+#### Combining Extrusions
+Using the angle parameter > **Requires:** 2019.05, a hook can be modeled.
+
+ eps = 0.01;
+ translate([eps, 60, 0])
+     rotate_extrude(angle=270, convexity=10)
+         translate([40, 0]) circle(10);
+ rotate_extrude(angle=90, convexity=10)
+     translate([20, 0]) circle(10);
+ translate([20, eps, 0])
+     rotate([90, 0, 0]) cylinder(r=10, h=80+eps);
+
+![Hook.png](images/Hook.png)
+
+#### Orientation
+If you're making a round 360 degree extrusion, it doesn't matter where it starts.  If, on the other hand, you're using $fn to make an extrusion with some specific number of sides, it can matter.  With an odd number of sides, there will be a vertex on either the left or the right, and a side opposite it.
+
+With **angle** not specified, the extrusion starts along the negative X axis, to the left of the origin.  With an odd number of sides, there is a vertex on the left and a side on the right. (Note that this is inconsistent with the behavior for **angle** less than 360, and with the behavior for **circle** and other round primitives.)
+
+With **angle** specified, and not equal to 360, the extrusion starts along the positive X axis, to the right of the origin.
+
+For 2021.01 and earlier, if **angle** is equal to 360, the extrusion starts along the negative X axis, as for **angle** not being specified.
+
+For the development snapshot, if **angle** is 360, the extrusion starts along the positive X axis, as for other cases where **angle** is specified. Explicitly specifying **angle**=360 thus yields results consistent with other round primitives.
+
+A future release may change this behavior so that when **angle** is not specified the extrusion starts along the positive X axis, making all of these cases consistent.
+
+**start** directly controls the start point. > **Requires:** Development snapshot

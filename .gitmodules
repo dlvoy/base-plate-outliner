@@ -1,0 +1,3 @@
+[submodule "machineblocks"]
+	path = machineblocks
+	url = https://github.com/pks5/machineblocks
