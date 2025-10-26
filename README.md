@@ -6,7 +6,7 @@ This tool generates OpenSCAD scripts to render irregular-shaped baseplates based
 
 The script analyzes a PNG image to identify a shape (dark pixels = inside, light pixels = outside), then optimally decomposes the shape into rectangular baseplates and generates an OpenSCAD script to render them.
 
-This project uses the **MachineBlocks** library (https://github.com/pks5/machineblocks) for rendering LEGO-compatible bricks in OpenSCAD. MachineBlocks is included as a git submodule.
+This project uses the **MachineBlocks** library (https://github.com/pks5/machineblocks) for rendering big-L compatible bricks in OpenSCAD. MachineBlocks is included as a git submodule.
 
 ## Installation
 
@@ -23,7 +23,7 @@ You need:
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/dlvoy/base-plate-outliner
 cd base-plate-outliner
 
 # Initialize and update submodules
@@ -131,14 +131,14 @@ If no image is specified, it defaults to `image.png`. The output filename is aut
 ### Options
 
 - `image` - Path to input PNG image (default: `image.png`)
-- `-o, --output` - Path to output OpenSCAD file (default: derived from input image name, e.g., `image.png` → `image.scad`)
-- `-t, --threshold` - Grayscale threshold (0-255). Pixels darker than this value are considered "inside" the shape (default: 128)
-- `--debug` - Enable debug mode: each baseplate gets a random color with varying hue (useful for visualizing individual baseplates)
+- `-o, --output` - Path to output OpenSCAD file (default: derived from input image name, e.g., `image.png` → `image.scad`). **Important**: If the output file is in a different directory than the script's main directory, the `use` and `include` directives in the generated .scad file will use relative paths that may not correctly point to the `machineblocks/` library. In such cases, you must either install MachineBlocks globally in OpenSCAD, or manually adjust the paths in the generated file to ensure OpenSCAD can find the library
 - `--edge [THICKNESS]` - Only generate baseplates on the edge of the shape with specified thickness in brick units (default: 1 if no value given). Interior is filled with solid cubes for efficiency. Value must be >= 1
 - `--border [THICKNESS_MM]` - Add a border around the outside edge of the shape with specified thickness in millimeters (default: 5mm if no value given). Border is created using solid cubes positioned precisely in mm. Value must be != 0 (unless using --frame mode)
-- `--frame` - Frame mode: Creates a filled rectangular border that encloses the entire shape. In this mode, `--border` specifies the padding (in mm) between the shape's bounding rectangle and the outer frame edge. Padding can be 0 for no gap. The frame fills the area between the shape edges and the outer rectangle
 - `--borderHeightAdjust ADJUST_MM` - Adjust the height of the border/frame in millimeters (default: 0). This adjustment is added to the standard baseplate height (without studs). Can be positive (taller) or negative (shorter), but the final height must be > 0 (base height is 3.2mm)
+- `--frame` - Frame mode: Creates a filled rectangular border that encloses the entire shape. In this mode, `--border` specifies the padding (in mm) between the shape's bounding rectangle and the outer frame edge. Padding can be 0 for no gap. The frame fills the area between the shape edges and the outer rectangle
 - `--config CONFIG_PATH` - Path to OpenSCAD config file (default: `machineblocks/config/config-default.scad`). The script reads `unitMbu`, `unitGrid`, and `scale` values from this file to calculate brick dimensions. This ensures consistency between the Python script and the generated OpenSCAD output. For Nanoblocks (half-size bricks), use `configs/config-nano.scad`
+- `-t, --threshold` - Grayscale threshold (0-255). Pixels darker than this value are considered "inside" the shape (default: 128)
+- `--debug` - Enable debug mode: each baseplate gets a random color with varying hue (useful for visualizing individual baseplates)
 
 ### Examples
 
@@ -204,7 +204,10 @@ python3 generate_irregular_baseplate.py my_shape.png --config=configs/config-nan
 2. **Thresholding**: Pixels are classified as "inside" (dark, value < threshold) or "outside" (light, value >= threshold)
 3. **Rectangle Decomposition**: A greedy algorithm decomposes the shape into rectangular regions, attempting to minimize the number of baseplates needed
 4. **Edge Processing** (optional): When `--edge` is used, the shape is split into edge and interior regions using morphological erosion with 8-connectivity (ensuring uniform thickness in all directions including diagonals)
-5. **Border Generation** (optional): When `--border` is used, a border is created around the outside of the shape with precise millimeter positioning and sizing. The border uses an optimized merging algorithm to minimize the number of cubes while maintaining exact mm dimensions
+5. **Border/Frame Generation** (optional):
+   - **Border Mode** (`--border`): Creates a border around the outside edge of the shape, following its contours with precise millimeter positioning and sizing
+   - **Frame Mode** (`--frame --border`): Creates a filled rectangular frame that encloses the entire shape. The frame fills the area between the shape's bounding box and an outer rectangle expanded by the specified padding
+   - Both modes use an optimized rectangle decomposition algorithm to minimize the number of cubes while maintaining exact mm dimensions
 6. **OpenSCAD Generation**: The script generates an OpenSCAD file with properly positioned `machineblock()` calls for baseplates, and `cube()` calls for interior fill and borders
 7. **Debug Mode** (optional): When enabled with `--debug`, each baseplate receives a unique random color. The colors maintain the same saturation and lightness as the default yellow (#EAC645) but vary in hue, making it easy to distinguish individual baseplates in the rendered model
 
@@ -241,7 +244,7 @@ The script generates:
 - An OpenSCAD `.scad` file ready to be opened in OpenSCAD
 - Statistics about the baseplates used (sizes and quantities)
 
-The generated OpenSCAD file can be opened in OpenSCAD and rendered to STL for 3D printing.
+The generated OpenSCAD file can be opened in OpenSCAD, rendered and exported to 3MF or STL for 3D printing.
 
 ## Algorithm Details
 
@@ -281,7 +284,7 @@ deactivate
 
 Edge mode generates baseplates only on the perimeter of the shape, filling the interior with solid cubes for material efficiency:
 
-- **Thickness**: Specified in brick units (1 brick unit = 8mm)
+- **Thickness**: Specified in brick units (1 brick unit = 8mm for standard bricks, depending on config)
 - **Algorithm**: Uses morphological erosion with 8-connectivity to ensure uniform thickness in all directions (horizontal, vertical, and diagonal)
 - **Interior Fill**: Automatically fills the interior with optimized cubes (sized in brick units)
 - **Use Case**: Ideal for large shapes where a solid interior saves printing time and material while maintaining structural strength at the edges
@@ -326,7 +329,7 @@ You can combine `--edge` with either `--border` or `--frame` modes to create com
 
 ### Nanoblocks Configuration
 
-The project includes a configuration file for generating Nanoblocks, which are half-size versions of standard LEGO-compatible bricks:
+The project includes a configuration file for generating Nanoblocks, which are half-size versions of standard bricks:
 
 - **Config File**: `configs/config-nano.scad`
 - **Scale**: 0.5 (half the size of standard bricks)
@@ -349,8 +352,6 @@ python3 generate_irregular_baseplate.py my_shape.png --config=configs/config-nan
 python3 generate_irregular_baseplate.py my_shape.png --config=configs/config-nano.scad --frame --border=2
 ```
 
-**Note**: The config-nano.scad file was created by Dominik Dzienia based on the standard MachineBlocks config-default.scad.
-
 ## Technical Details
 
 - **Coordinate System**: The script correctly handles coordinate system conversion:
@@ -363,10 +364,14 @@ python3 generate_irregular_baseplate.py my_shape.png --config=configs/config-nan
 - **Border Precision**: Border cubes use floating-point mm coordinates for precise positioning (e.g., 3.2mm, 4.5mm)
 - **Gap Elimination**: All baseplates are generated with `baseSideAdjustment = 0` to eliminate gaps between adjacent pieces
 - **Integration**: The generated script uses the MachineBlocks library's `machineblock()` function with standard configuration parameters
+- **Path Handling**: Generated .scad files use relative paths for `use` and `include` directives (e.g., `use <machineblocks/lib/block.scad>`). These paths are relative to the script's main directory. If you generate output files in different directories using `-o`, the relative paths may not resolve correctly in OpenSCAD. Solutions:
+  - Generate output files in the same directory as the script
+  - Install MachineBlocks globally in OpenSCAD (see OpenSCAD documentation for library paths)
+  - Manually edit the `use` and `include` paths in the generated .scad file to use absolute paths or correct relative paths
 
 ## About MachineBlocks
 
-This project uses the [MachineBlocks](https://github.com/pks5/machineblocks) library, which is a comprehensive OpenSCAD library for creating LEGO-compatible bricks and components. MachineBlocks provides:
+This project uses the [MachineBlocks](https://github.com/pks5/machineblocks) library, which is a comprehensive OpenSCAD library for creating big-L compatible bricks and components. MachineBlocks provides:
 
 - Parametric brick generation
 - Support for various brick types (standard, Technic, plates, etc.)
@@ -403,7 +408,7 @@ base-plate-outliner/
 
 - The greedy algorithm may not always produce the absolute minimum number of baseplates
 - Very complex shapes with many intricate details may result in many small 1x1 plates
-- The script doesn't currently optimize for specific baseplate sizes (e.g., preferring standard LEGO sizes)
+- The script doesn't currently optimize for specific baseplate sizes (e.g., preferring standard big-L sizes)
 
 ## Future Improvements
 
@@ -416,8 +421,16 @@ Possible enhancements:
 
 ## License
 
-This script is provided as-is for use with the MachineBlocks library. The MachineBlocks library itself is:
+This script is provided as-is for use with the MachineBlocks library. 
 
+```
+Copyright (c) 2025 Dominik Dzienia <dominik.dzsienia@gmail.com>
+MIT License
+https://opensource.org/license/MIT
+```
+
+
+The MachineBlocks library itself is:
 ```
 Copyright (c) 2022 - 2025 Jan Philipp Knoeller <pk@pksoftware.de>
 Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
