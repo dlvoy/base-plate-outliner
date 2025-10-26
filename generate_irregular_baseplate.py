@@ -100,6 +100,11 @@ def extract_border_rectangles_mm(mask: np.ndarray, border_thickness_mm: float, u
     """
     Extract border region outside the shape and decompose into mm-based rectangles.
 
+    This uses a high-resolution approach:
+    1. Create a high-res mask with border_thickness_mm resolution
+    2. Mark all border pixels in this high-res space
+    3. Apply greedy rectangle decomposition to find optimal rectangles
+
     Args:
         mask: 2D boolean array where True = inside shape (in brick units)
         border_thickness_mm: Thickness of border in millimeters
@@ -110,109 +115,57 @@ def extract_border_rectangles_mm(mask: np.ndarray, border_thickness_mm: float, u
     """
     rows, cols = mask.shape
 
-    # Find the bounding edges of the shape
-    # For each pixel on the edge of the shape, we'll create a border rectangle
-    border_rects = []
+    # Calculate high-res grid dimensions
+    # Use border_thickness_mm as the resolution unit for optimal decomposition
+    resolution_mm = min(border_thickness_mm, unit_size)
 
-    # Process each pixel in the mask
+    # Calculate padded dimensions to accommodate border
+    border_pixels = int(np.ceil(border_thickness_mm / resolution_mm))
+
+    # High-res dimensions
+    hr_width = int(np.ceil(cols * unit_size / resolution_mm)) + 2 * border_pixels
+    hr_height = int(np.ceil(rows * unit_size / resolution_mm)) + 2 * border_pixels
+
+    # Create high-res masks
+    hr_shape_mask = np.zeros((hr_height, hr_width), dtype=bool)
+
+    # Map original shape to high-res grid
     for row in range(rows):
         for col in range(cols):
             if mask[row, col]:
-                # Check if this pixel is on the edge (has at least one non-shape neighbor)
-                is_edge = False
+                # Calculate high-res coordinates for this brick unit
+                hr_col_start = int(col * unit_size / resolution_mm) + border_pixels
+                hr_row_start = int(row * unit_size / resolution_mm) + border_pixels
+                hr_col_end = int((col + 1) * unit_size / resolution_mm) + border_pixels
+                hr_row_end = int((row + 1) * unit_size / resolution_mm) + border_pixels
 
-                # Check all 8 neighbors
-                for dr in [-1, 0, 1]:
-                    for dc in [-1, 0, 1]:
-                        if dr == 0 and dc == 0:
-                            continue
-                        nr, nc = row + dr, col + dc
+                hr_shape_mask[hr_row_start:hr_row_end, hr_col_start:hr_col_end] = True
 
-                        # If neighbor is outside bounds or not in shape, this is an edge
-                        if nr < 0 or nr >= rows or nc < 0 or nc >= cols or not mask[nr, nc]:
-                            is_edge = True
-                            break
-                    if is_edge:
-                        break
+    # Dilate the shape to create border region
+    struct = ndimage.generate_binary_structure(2, 2)
+    dilated = hr_shape_mask.copy()
+    for _ in range(border_pixels):
+        dilated = ndimage.binary_dilation(dilated, structure=struct)
 
-                # If this is an edge pixel, determine which sides need borders
-                if is_edge:
-                    # Check each of 8 directions and add border rectangles
-                    # We check all 8 neighbors and add borders for missing ones
+    # Border is dilated minus original shape
+    hr_border_mask = dilated & ~hr_shape_mask
 
-                    # Helper to check if position is in mask
-                    def is_in_shape(r, c):
-                        if r < 0 or r >= rows or c < 0 or c >= cols:
-                            return False
-                        return mask[r, c]
+    # Apply greedy rectangle decomposition to the high-res border mask
+    hr_rectangles = greedy_rectangle_decomposition(hr_border_mask)
 
-                    # Top (North)
-                    if not is_in_shape(row - 1, col):
-                        x_mm = col * unit_size
-                        y_mm = row * unit_size - border_thickness_mm
-                        width_mm = unit_size
-                        height_mm = border_thickness_mm
-                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
+    # Convert high-res rectangles back to mm coordinates
+    mm_rectangles = []
+    for (hr_col, hr_row, hr_width, hr_height) in hr_rectangles:
+        # Convert from high-res grid to mm coordinates
+        # Subtract border_pixels offset and multiply by resolution
+        x_mm = (hr_col - border_pixels) * resolution_mm
+        y_mm = (hr_row - border_pixels) * resolution_mm
+        width_mm = hr_width * resolution_mm
+        height_mm = hr_height * resolution_mm
 
-                    # Bottom (South)
-                    if not is_in_shape(row + 1, col):
-                        x_mm = col * unit_size
-                        y_mm = (row + 1) * unit_size
-                        width_mm = unit_size
-                        height_mm = border_thickness_mm
-                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
+        mm_rectangles.append((x_mm, y_mm, width_mm, height_mm))
 
-                    # Left (West)
-                    if not is_in_shape(row, col - 1):
-                        x_mm = col * unit_size - border_thickness_mm
-                        y_mm = row * unit_size
-                        width_mm = border_thickness_mm
-                        height_mm = unit_size
-                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
-
-                    # Right (East)
-                    if not is_in_shape(row, col + 1):
-                        x_mm = (col + 1) * unit_size
-                        y_mm = row * unit_size
-                        width_mm = border_thickness_mm
-                        height_mm = unit_size
-                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
-
-                    # Top-Left (NorthWest) corner
-                    if not is_in_shape(row - 1, col - 1):
-                        x_mm = col * unit_size - border_thickness_mm
-                        y_mm = row * unit_size - border_thickness_mm
-                        width_mm = border_thickness_mm
-                        height_mm = border_thickness_mm
-                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
-
-                    # Top-Right (NorthEast) corner
-                    if not is_in_shape(row - 1, col + 1):
-                        x_mm = (col + 1) * unit_size
-                        y_mm = row * unit_size - border_thickness_mm
-                        width_mm = border_thickness_mm
-                        height_mm = border_thickness_mm
-                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
-
-                    # Bottom-Left (SouthWest) corner
-                    if not is_in_shape(row + 1, col - 1):
-                        x_mm = col * unit_size - border_thickness_mm
-                        y_mm = (row + 1) * unit_size
-                        width_mm = border_thickness_mm
-                        height_mm = border_thickness_mm
-                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
-
-                    # Bottom-Right (SouthEast) corner
-                    if not is_in_shape(row + 1, col + 1):
-                        x_mm = (col + 1) * unit_size
-                        y_mm = (row + 1) * unit_size
-                        width_mm = border_thickness_mm
-                        height_mm = border_thickness_mm
-                        border_rects.append((x_mm, y_mm, width_mm, height_mm))
-
-    # Now merge adjacent rectangles with the same position and size alignment
-    # This is a simplified greedy merge
-    return merge_mm_rectangles(border_rects)
+    return mm_rectangles
 
 
 def merge_mm_rectangles(rectangles: List[Tuple[float, float, float, float]]) -> List[Tuple[float, float, float, float]]:
