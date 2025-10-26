@@ -182,7 +182,7 @@ def extract_border_rectangles_mm(mask: np.ndarray, border_thickness_mm: float, u
     Extract border region outside the shape and decompose into mm-based rectangles.
 
     This uses a high-resolution approach:
-    1. Create a high-res mask with border_thickness_mm resolution
+    1. Create a high-res mask with fine resolution
     2. Mark all border pixels in this high-res space
     3. Apply greedy rectangle decomposition to find optimal rectangles
 
@@ -196,29 +196,30 @@ def extract_border_rectangles_mm(mask: np.ndarray, border_thickness_mm: float, u
     """
     rows, cols = mask.shape
 
-    # Calculate high-res grid dimensions
-    # Use border_thickness_mm as the resolution unit for optimal decomposition
-    resolution_mm = min(border_thickness_mm, unit_size)
+    # Use a fine resolution (0.1mm) to accurately represent any border thickness
+    # This ensures precise mapping regardless of border_thickness_mm value
+    resolution_mm = 0.1
 
     # Calculate padded dimensions to accommodate border
     border_pixels = int(np.ceil(border_thickness_mm / resolution_mm))
 
-    # High-res dimensions
-    hr_width = int(np.ceil(cols * unit_size / resolution_mm)) + 2 * border_pixels
-    hr_height = int(np.ceil(rows * unit_size / resolution_mm)) + 2 * border_pixels
+    # High-res dimensions - calculate exact sizes
+    hr_width = int(np.round(cols * unit_size / resolution_mm)) + 2 * border_pixels
+    hr_height = int(np.round(rows * unit_size / resolution_mm)) + 2 * border_pixels
 
     # Create high-res masks
     hr_shape_mask = np.zeros((hr_height, hr_width), dtype=bool)
 
-    # Map original shape to high-res grid
+    # Map original shape to high-res grid using exact floating-point arithmetic
     for row in range(rows):
         for col in range(cols):
             if mask[row, col]:
-                # Calculate high-res coordinates for this brick unit
-                hr_col_start = int(col * unit_size / resolution_mm) + border_pixels
-                hr_row_start = int(row * unit_size / resolution_mm) + border_pixels
-                hr_col_end = int((col + 1) * unit_size / resolution_mm) + border_pixels
-                hr_row_end = int((row + 1) * unit_size / resolution_mm) + border_pixels
+                # Calculate high-res coordinates for this brick unit using rounding
+                # to ensure consistent mapping
+                hr_col_start = int(np.round(col * unit_size / resolution_mm)) + border_pixels
+                hr_row_start = int(np.round(row * unit_size / resolution_mm)) + border_pixels
+                hr_col_end = int(np.round((col + 1) * unit_size / resolution_mm)) + border_pixels
+                hr_row_end = int(np.round((row + 1) * unit_size / resolution_mm)) + border_pixels
 
                 hr_shape_mask[hr_row_start:hr_row_end, hr_col_start:hr_col_end] = True
 
