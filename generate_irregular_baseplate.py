@@ -938,9 +938,9 @@ def main():
         # Step 2b: Generate border or frame if requested
         border_rectangles_top = None
         if args.border is not None:
-            # Get wall thickness adjustment for clearance calculation
-            wall_thickness_adj = config.get('baseWallThicknessAdjustment', -0.1)
-            # Inset amount is the negative of wall thickness adjustment (to expand cutout)
+            # Get base side adjustment for clearance calculation
+            wall_thickness_adj = config.get('baseSideAdjustment', -0.1)
+            # Inset amount is the negative of base side adjustment (to expand cutout)
             inset_mm = -wall_thickness_adj if args.borderHeightAdjust > 0 else 0.0
 
             if args.frame:

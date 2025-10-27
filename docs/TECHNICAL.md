@@ -23,7 +23,7 @@ This approach prioritizes larger rectangles, which generally results in fewer to
 - **Border Precision**: Border cubes use floating-point mm coordinates for precise positioning (e.g., 3.2mm, 4.5mm)
 - **Two-Layer Border/Frame**: When `--borderHeightAdjust > 0`, borders and frames are generated as two separate layers:
   - **Base layer**: Height equals baseplate height, provides main structural support
-  - **Top layer**: Height equals `borderHeightAdjust` value, with inner edge inset by 0.1mm (derived from `baseWallThicknessAdjustment`) to provide clearance and prevent brick collision when stacking
+  - **Top layer**: Height equals `borderHeightAdjust` value, with inner edge inset by 0.1mm (derived from `baseSideAdjustment`) to provide clearance and prevent brick collision when stacking
   - The outer boundary remains identical between layers while only the inner edge is adjusted for clearance
 - **Gap Elimination**: All baseplates are generated with `baseSideAdjustment = 0` to eliminate gaps between adjacent pieces
 - **Integration**: The generated script uses the MachineBlocks library's `machineblock()` function with standard configuration parameters
