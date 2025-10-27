@@ -21,7 +21,5 @@ ENV/
 .vibes
 
 # Generated files from irregular baseplate generator
-example_output.scad
-irregular_baseplate.scad
-test_shape.png
+test_shape.scad
 tests/*

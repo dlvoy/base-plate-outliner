@@ -211,16 +211,6 @@ python3 generate_irregular_baseplate.py my_shape.png --config=configs/config-nan
 6. **OpenSCAD Generation**: The script generates an OpenSCAD file with properly positioned `machineblock()` calls for baseplates, and `cube()` calls for interior fill and borders
 7. **Debug Mode** (optional): When enabled with `--debug`, each baseplate receives a unique random color. The colors maintain the same saturation and lightness as the default yellow (#EAC645) but vary in hue, making it easy to distinguish individual baseplates in the rendered model
 
-## Creating Test Images
-
-You can create a simple test image using the included helper script (make sure your virtual environment is activated):
-
-```bash
-python3 create_test_image.py
-```
-
-This creates a 16x16 pixel L-shaped test pattern in `test_shape.png`.
-
 ## Image Guidelines
 
 - **Format**: PNG images work best
@@ -255,28 +245,6 @@ The rectangle decomposition uses a greedy algorithm:
 4. Continue scanning
 
 This approach prioritizes larger rectangles, which generally results in fewer total pieces, though it may not always find the absolute optimal solution.
-
-## Example Workflow
-
-```bash
-# 0. Activate virtual environment (if not already activated)
-source .venv/bin/activate  # On Linux/Mac
-# OR: .venv\Scripts\activate  # On Windows
-
-# 1. Create a test image
-python3 create_test_image.py
-
-# 2. Generate the OpenSCAD script (automatically creates test_shape.scad)
-python3 generate_irregular_baseplate.py test_shape.png
-
-# 3. Open in OpenSCAD
-# (Open test_shape.scad in OpenSCAD application)
-
-# 4. Render and export to STL for 3D printing
-
-# 5. Deactivate virtual environment when done
-deactivate
-```
 
 ## Advanced Features
 
@@ -396,7 +364,7 @@ base-plate-outliner/
 ├── configs/                    # Custom configuration files
 │   └── config-nano.scad        # Nanoblocks (half-size) configuration
 ├── generate_irregular_baseplate.py  # Main script
-├── create_test_image.py        # Test image generator
+├── test_shape.png              # Test image
 ├── example_output.scad         # Example generated output
 ├── setup.sh                    # Linux/Mac setup script
 ├── setup.bat                   # Windows setup script
