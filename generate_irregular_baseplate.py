@@ -177,7 +177,7 @@ def find_largest_rectangle(mask: np.ndarray, start_row: int, start_col: int) -> 
     return (best_width, best_height)
 
 
-def extract_border_rectangles_mm(mask: np.ndarray, border_thickness_mm: float, unit_size: float = 8.0) -> List[Tuple[float, float, float, float]]:
+def extract_border_rectangles_mm(mask: np.ndarray, border_thickness_mm: float, unit_size: float = 8.0, inset_mm: float = 0.0) -> List[Tuple[float, float, float, float]]:
     """
     Extract border region outside the shape and decompose into mm-based rectangles.
 
@@ -190,6 +190,8 @@ def extract_border_rectangles_mm(mask: np.ndarray, border_thickness_mm: float, u
         mask: 2D boolean array where True = inside shape (in brick units)
         border_thickness_mm: Thickness of border in millimeters
         unit_size: Size of one brick unit in mm (default 8.0)
+        inset_mm: Inset amount in millimeters to shrink the shape before creating border (default 0.0)
+                  Positive value creates clearance for stacked bricks
 
     Returns:
         List of rectangles as (x_mm, y_mm, width_mm, height_mm) tuples in millimeters
@@ -229,8 +231,19 @@ def extract_border_rectangles_mm(mask: np.ndarray, border_thickness_mm: float, u
     for _ in range(border_pixels):
         dilated = ndimage.binary_dilation(dilated, structure=struct)
 
-    # Border is dilated minus original shape
-    hr_border_mask = dilated & ~hr_shape_mask
+    # For inset version: expand the inner edge cutout
+    if inset_mm > 0:
+        inset_pixels = int(np.round(inset_mm / resolution_mm))
+        struct = ndimage.generate_binary_structure(2, 2)
+        # Expand the shape mask to create clearance on inner edge
+        inner_edge = hr_shape_mask.copy()
+        for _ in range(inset_pixels):
+            inner_edge = ndimage.binary_dilation(inner_edge, structure=struct)
+        # Border is between outer edge (dilated) and inner edge (expanded shape)
+        hr_border_mask = dilated & ~inner_edge
+    else:
+        # Border is dilated minus original shape
+        hr_border_mask = dilated & ~hr_shape_mask
 
     # Apply greedy rectangle decomposition to the high-res border mask
     hr_rectangles = greedy_rectangle_decomposition(hr_border_mask)
@@ -250,7 +263,7 @@ def extract_border_rectangles_mm(mask: np.ndarray, border_thickness_mm: float, u
     return mm_rectangles
 
 
-def extract_frame_rectangles_mm(mask: np.ndarray, padding_mm: float, unit_size: float = 8.0) -> List[Tuple[float, float, float, float]]:
+def extract_frame_rectangles_mm(mask: np.ndarray, padding_mm: float, unit_size: float = 8.0, inset_mm: float = 0.0) -> List[Tuple[float, float, float, float]]:
     """
     Extract frame region - a filled rectangular border enclosing the entire shape.
 
@@ -262,6 +275,8 @@ def extract_frame_rectangles_mm(mask: np.ndarray, padding_mm: float, unit_size: 
         mask: 2D boolean array where True = inside shape (in brick units)
         padding_mm: Padding between shape outline and frame outer edge in millimeters (can be 0)
         unit_size: Size of one brick unit in mm (default 8.0)
+        inset_mm: Inset amount in millimeters to shrink the shape before creating frame (default 0.0)
+                  Positive value creates clearance for stacked bricks
 
     Returns:
         List of rectangles as (x_mm, y_mm, width_mm, height_mm) tuples in millimeters
@@ -329,8 +344,19 @@ def extract_frame_rectangles_mm(mask: np.ndarray, padding_mm: float, unit_size: 
 
                 hr_shape_mask[hr_row_start:hr_row_end, hr_col_start:hr_col_end] = True
 
-    # Frame region is outer rectangle minus shape
-    hr_frame_mask = hr_frame_mask & ~hr_shape_mask
+    # For inset version: expand the inner edge cutout
+    if inset_mm > 0:
+        inset_pixels = int(np.round(inset_mm / resolution_mm))
+        struct = ndimage.generate_binary_structure(2, 2)
+        # Expand the shape mask to create clearance on inner edge
+        inner_edge = hr_shape_mask.copy()
+        for _ in range(inset_pixels):
+            inner_edge = ndimage.binary_dilation(inner_edge, structure=struct)
+        # Frame is between outer rectangle and inner edge (expanded shape)
+        hr_frame_mask = hr_frame_mask & ~inner_edge
+    else:
+        # Frame region is outer rectangle minus shape
+        hr_frame_mask = hr_frame_mask & ~hr_shape_mask
 
     # Apply greedy rectangle decomposition
     hr_rectangles = greedy_rectangle_decomposition(hr_frame_mask)
@@ -524,6 +550,7 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
                             image_height: int = 0,
                             interior_rectangles: Optional[List[Tuple[int, int, int, int]]] = None,
                             border_rectangles: Optional[List[Tuple[float, float, float, float]]] = None,
+                            border_rectangles_top: Optional[List[Tuple[float, float, float, float]]] = None,
                             border_thickness_mm: float = 0.0,
                             border_height_adjust_mm: float = 0.0,
                             unit_size: float = 8.0,
@@ -608,6 +635,7 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
         script_lines.append("        holeZDiameterAdjustment = holeZDiameterAdjustment,")
         script_lines.append("        pinDiameterAdjustment = pinDiameterAdjustment,")
         script_lines.append("        studDiameterAdjustment = studDiameterAdjustment,")
+        script_lines.append("        studHeight = studHeight,")
         script_lines.append("        studCutoutAdjustment = studCutoutAdjustment,")
         script_lines.append("        previewRender = previewRender,")
         script_lines.append("        previewQuality = previewQuality,")
@@ -656,14 +684,22 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
         thickness_label = f"padding: {border_thickness_mm}mm" if is_frame_mode else f"thickness: {border_thickness_mm}mm"
 
         script_lines.append(f"\n// {mode_label} (cubes) - positioned and sized in millimeters")
-        script_lines.append(f"// {mode_label} {thickness_label}, Height adjustment: {border_height_adjust_mm}mm")
+        if border_height_adjust_mm > 0 and border_rectangles_top:
+            script_lines.append(f"// {mode_label} {thickness_label}, Two-layer design:")
+            script_lines.append(f"//   Base layer: baseplate height (flush with baseplates)")
+            script_lines.append(f"//   Top layer: {border_height_adjust_mm}mm tall (inset for clearance)")
+        else:
+            script_lines.append(f"// {mode_label} {thickness_label}, Height adjustment: {border_height_adjust_mm}mm")
+
+        # Generate base layer
+        script_lines.append(f"\n// {mode_label} base layer")
         for i, (x_mm, y_mm, width_mm, height_mm) in enumerate(border_rectangles):
             # Border/frame rectangles are already in mm, but Y needs flipping for OpenSCAD
             # Convert image-space Y (where 0 is top) to OpenSCAD Y (where 0 is bottom)
             translate_x = x_mm
             translate_y = (image_height * unit_size) - y_mm - height_mm
 
-            script_lines.append(f"\n// {mode_label} cube {i + 1}: {width_mm:.2f}mm x {height_mm:.2f}mm at position ({x_mm:.2f}mm, {y_mm:.2f}mm)")
+            script_lines.append(f"\n// {mode_label} base cube {i + 1}: {width_mm:.2f}mm x {height_mm:.2f}mm at position ({x_mm:.2f}mm, {y_mm:.2f}mm)")
 
             # Wrap with color() if in debug mode
             if debug:
@@ -675,7 +711,39 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
             script_lines.append("    cube([")
             script_lines.append(f"        {width_mm:.4f},  // width in mm")
             script_lines.append(f"        {height_mm:.4f},  // height in mm")
-            script_lines.append(f"        (1 * unitGrid[1] * unitMbu * scale) + {border_height_adjust_mm}  // baseplate height without studs + adjustment")
+            if border_height_adjust_mm > 0 and border_rectangles_top:
+                script_lines.append(f"        (1 * unitGrid[1] * unitMbu * scale)  // baseplate height without studs")
+            else:
+                script_lines.append(f"        (1 * unitGrid[1] * unitMbu * scale) + {border_height_adjust_mm}  // baseplate height without studs + adjustment")
+            script_lines.append("    ]);")
+            script_lines.append("}")
+
+            # Close color() wrapper if in debug mode
+            if debug:
+                script_lines.append("}")
+
+    # Generate top layer for border/frame if provided (with clearance)
+    if border_rectangles_top:
+        mode_label = "Frame" if is_frame_mode else "Border"
+
+        script_lines.append(f"\n// {mode_label} top layer (inset for clearance)")
+        for i, (x_mm, y_mm, width_mm, height_mm) in enumerate(border_rectangles_top):
+            translate_x = x_mm
+            translate_y = (image_height * unit_size) - y_mm - height_mm
+
+            script_lines.append(f"\n// {mode_label} top cube {i + 1}: {width_mm:.2f}mm x {height_mm:.2f}mm at position ({x_mm:.2f}mm, {y_mm:.2f}mm)")
+
+            # Wrap with color() if in debug mode
+            if debug:
+                hex_color = generate_random_color()
+                openscad_color = hex_to_openscad_rgb(hex_color)
+                script_lines.append(f"color({openscad_color}) {{")
+
+            script_lines.append(f"translate([{translate_x:.4f}, {translate_y:.4f}, (1 * unitGrid[1] * unitMbu * scale)]) {{")
+            script_lines.append("    cube([")
+            script_lines.append(f"        {width_mm:.4f},  // width in mm")
+            script_lines.append(f"        {height_mm:.4f},  // height in mm")
+            script_lines.append(f"        {border_height_adjust_mm}  // height adjustment")
             script_lines.append("    ]);")
             script_lines.append("}")
 
@@ -868,17 +936,35 @@ def main():
             rectangles = greedy_rectangle_decomposition(binary_mask)
 
         # Step 2b: Generate border or frame if requested
+        border_rectangles_top = None
         if args.border is not None:
+            # Get wall thickness adjustment for clearance calculation
+            wall_thickness_adj = config.get('baseWallThicknessAdjustment', -0.1)
+            # Inset amount is the negative of wall thickness adjustment (to expand cutout)
+            inset_mm = -wall_thickness_adj if args.borderHeightAdjust > 0 else 0.0
+
             if args.frame:
                 # Frame mode: filled rectangular border enclosing entire shape
                 print(f"\nFrame mode enabled: padding = {args.border}mm")
-                border_rectangles = extract_frame_rectangles_mm(binary_mask, args.border, unit_size)
-                print(f"Generated {len(border_rectangles)} frame rectangles")
+                border_rectangles = extract_frame_rectangles_mm(binary_mask, args.border, unit_size, inset_mm=0.0)
+                print(f"Generated {len(border_rectangles)} frame rectangles (base layer)")
+
+                # Generate top layer with inset if borderHeightAdjust > 0
+                if args.borderHeightAdjust > 0:
+                    print(f"Generating top layer with {inset_mm}mm inset for clearance")
+                    border_rectangles_top = extract_frame_rectangles_mm(binary_mask, args.border, unit_size, inset_mm=inset_mm)
+                    print(f"Generated {len(border_rectangles_top)} frame rectangles (top layer)")
             else:
                 # Normal border mode: border around shape edges
                 print(f"\nBorder mode enabled: border thickness = {args.border}mm")
-                border_rectangles = extract_border_rectangles_mm(binary_mask, args.border, unit_size)
-                print(f"Generated {len(border_rectangles)} border rectangles")
+                border_rectangles = extract_border_rectangles_mm(binary_mask, args.border, unit_size, inset_mm=0.0)
+                print(f"Generated {len(border_rectangles)} border rectangles (base layer)")
+
+                # Generate top layer with inset if borderHeightAdjust > 0
+                if args.borderHeightAdjust > 0:
+                    print(f"Generating top layer with {inset_mm}mm inset for clearance")
+                    border_rectangles_top = extract_border_rectangles_mm(binary_mask, args.border, unit_size, inset_mm=inset_mm)
+                    print(f"Generated {len(border_rectangles_top)} border rectangles (top layer)")
 
         # Step 3: Generate OpenSCAD script
         print("\nGenerating OpenSCAD script...")
@@ -891,6 +977,7 @@ def main():
             image_height=binary_mask.shape[0],
             interior_rectangles=interior_rectangles,
             border_rectangles=border_rectangles,
+            border_rectangles_top=border_rectangles_top,
             border_thickness_mm=args.border if args.border is not None else 0.0,
             border_height_adjust_mm=args.borderHeightAdjust,
             unit_size=unit_size,

@@ -330,6 +330,10 @@ python3 generate_irregular_baseplate.py my_shape.png --config=configs/config-nan
 - **Config Integration**: The script parses the OpenSCAD config file to read `unitMbu`, `unitGrid`, and `scale` values, ensuring perfect consistency between Python calculations and OpenSCAD rendering
 - **Positioning**: Baseplates are positioned using OpenSCAD's `translate()` function
 - **Border Precision**: Border cubes use floating-point mm coordinates for precise positioning (e.g., 3.2mm, 4.5mm)
+- **Two-Layer Border/Frame**: When `--borderHeightAdjust > 0`, borders and frames are generated as two separate layers:
+  - **Base layer**: Height equals baseplate height, provides main structural support
+  - **Top layer**: Height equals `borderHeightAdjust` value, with inner edge inset by 0.1mm (derived from `baseWallThicknessAdjustment`) to provide clearance and prevent brick collision when stacking
+  - The outer boundary remains identical between layers while only the inner edge is adjusted for clearance
 - **Gap Elimination**: All baseplates are generated with `baseSideAdjustment = 0` to eliminate gaps between adjacent pieces
 - **Integration**: The generated script uses the MachineBlocks library's `machineblock()` function with standard configuration parameters
 - **Path Handling**: Generated .scad files use relative paths for `use` and `include` directives (e.g., `use <machineblocks/lib/block.scad>`). These paths are relative to the script's main directory. If you generate output files in different directories using `-o`, the relative paths may not resolve correctly in OpenSCAD. Solutions:

@@ -72,6 +72,11 @@ pinDiameterAdjustment = 0.0; // mm
 studDiameterAdjustment = 0.2; // mm
 studCutoutAdjustment = [0, 0.2]; // mm [diameter, height]
 
+// Stud height (in mbu units)
+// For Nanoblocks, studs should be proportionally taller relative to the brick height
+// Standard: 1 mbu, Nanoblocks: 1.5 mbu for better grip (adjust as needed)
+studHeight = 1.5; // mbu
+
 /*
 * Preview
 */
