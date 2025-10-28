@@ -44,7 +44,7 @@ base-plate-outliner/
 ├── configs/                    # Custom configuration files
 │   └── config-nano.scad        # Nanoblocks (half-size) configuration
 ├── generate_irregular_baseplate.py  # Main script
-├── test_shape.png              # Test image
+├── test/                       # Test shapes and renderings
 ├── example_output.scad         # Example generated output
 ├── setup.sh                    # Linux/Mac setup script
 ├── setup.bat                   # Windows setup script

@@ -147,6 +147,8 @@ If no `image` is specified, it defaults to `image.png`. The output filename is a
 
 - `--config CONFIG_PATH` - Path to OpenSCAD config file (default: `machineblocks/config/config-default.scad`). The script reads `unitMbu`, `unitGrid`, and `scale` values from this file to calculate brick dimensions. This ensures consistency between the Python script and the generated OpenSCAD output. For Nanoblocks (half-size bricks), use `configs/config-nano.scad`
 
+- `--center` - Center the generated model around X and Y axes. When enabled, the entire model (including baseplates, borders, and frames) is wrapped in a single `translate()` operation that positions the model's center at the origin (0,0). This is useful for 3D printing or when you want the model centered on the build plate
+
 - `-t, --threshold` - Grayscale threshold (0-255). Pixels darker than this value are considered "inside" the shape (default: 128)
 
 - `--debug` - Enable debug mode: each baseplate gets a random color with varying hue (useful for visualizing individual baseplates)
@@ -174,15 +176,24 @@ python3 generate_irregular_baseplate.py my_shape.png --frame --border=5
 
 # Generate baseplates for Nanoblocks (half-size bricks)
 python3 generate_irregular_baseplate.py my_shape.png --config=configs/config-nano.scad
+
+# Center the model at origin (useful for 3D printing)
+python3 generate_irregular_baseplate.py my_shape.png --center
+
+# Combine multiple options: centered model with border
+python3 generate_irregular_baseplate.py my_shape.png --border=3.2 --center
 ```
 
 More examples can be found in [usage guidelines](./docs/USAGE.md#examples)
+
+Also check out the [Sample Renderings Gallery](./docs/GALLERY.md) to see visual examples of all available features and modes!
 
 ## Usage Guidelines
 
 - In project `docs` there is detailed description of [modes](./docs/FEATURES.md#modes) and custom nano block [config](./docs/FEATURES.md#configurations)
 - Take a look into [usage guidelines](./docs/USAGE.md) in `docs` folder
 - There is also [tutorial on creating custom baseplate](./docs/TUTORIAL.md)
+- Browse the [visual gallery](./docs/GALLERY.md) to see rendered examples of all features
 - Documentation also describes [technical details](./docs/TECHNICAL.md) of used algorithm
 
 ## About MachineBlocks

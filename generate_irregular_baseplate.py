@@ -555,7 +555,10 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
                             border_height_adjust_mm: float = 0.0,
                             unit_size: float = 8.0,
                             config_path: str = "machineblocks/config/config-default.scad",
-                            is_frame_mode: bool = False) -> None:
+                            is_frame_mode: bool = False,
+                            config: Optional[Dict[str, float]] = None,
+                            center: bool = False,
+                            image_width: int = 0) -> None:
     """
     Generate an OpenSCAD script that renders the baseplates.
 
@@ -576,6 +579,9 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
         border_height_adjust_mm: Height adjustment for border in mm
         unit_size: Size of one brick unit in mm (calculated from config)
         config_path: Path to OpenSCAD config file to include
+        config: Optional parsed config dictionary to check for optional variables
+        center: If True, center the entire model around X and Y axes
+        image_width: Width of the source image in pixels (for centering calculation)
     """
 
     script_lines = [
@@ -589,6 +595,37 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
         f"include <{config_path}>;",
         "",
     ]
+
+    # Calculate centering offset if needed
+    center_x = 0.0
+    center_y = 0.0
+    if center:
+        # Calculate the center offset based on image dimensions
+        # Account for border/frame if present
+        if border_rectangles:
+            # Find the bounding box of all border rectangles
+            all_rects = border_rectangles[:]
+            if border_rectangles_top:
+                all_rects.extend(border_rectangles_top)
+
+            min_x = min(x for x, _, _, _ in all_rects)
+            max_x = max(x + w for x, _, w, _ in all_rects)
+            min_y = min(y for _, y, _, _ in all_rects)
+            max_y = max(y + h for _, y, _, h in all_rects)
+
+            # Calculate center offset (in OpenSCAD coordinates, Y is already flipped in rectangles)
+            total_width_mm = max_x - min_x
+            total_height_mm = max_y - min_y
+            center_x = -(min_x + total_width_mm / 2)
+            center_y = -(image_height * unit_size - min_y - total_height_mm / 2)
+        else:
+            # Center based on image dimensions
+            center_x = -(image_width * unit_size / 2)
+            center_y = -(image_height * unit_size / 2)
+
+        script_lines.append(f"// Model centered at origin")
+        script_lines.append(f"translate([{center_x:.4f}, {center_y:.4f}, 0]) {{")
+        script_lines.append("")
 
     if interior_rectangles:
         script_lines.append("// Edge baseplates")
@@ -635,7 +672,9 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
         script_lines.append("        holeZDiameterAdjustment = holeZDiameterAdjustment,")
         script_lines.append("        pinDiameterAdjustment = pinDiameterAdjustment,")
         script_lines.append("        studDiameterAdjustment = studDiameterAdjustment,")
-        script_lines.append("        studHeight = studHeight,")
+        # Only include studHeight if it exists in the config
+        if config and 'studHeight' in config:
+            script_lines.append("        studHeight = studHeight,")
         script_lines.append("        studCutoutAdjustment = studCutoutAdjustment,")
         script_lines.append("        previewRender = previewRender,")
         script_lines.append("        previewQuality = previewQuality,")
@@ -751,6 +790,11 @@ def generate_openscad_script(rectangles: List[Tuple[int, int, int, int]],
             if debug:
                 script_lines.append("}")
 
+    # Close centering translate if enabled
+    if center:
+        script_lines.append("")
+        script_lines.append("} // End centering translate")
+
     # Write the script to file
     with open(output_path, 'w') as f:
         f.write('\n'.join(script_lines))
@@ -863,6 +907,11 @@ def main():
         default='machineblocks/config/config-default.scad',
         metavar='CONFIG_PATH',
         help='Path to OpenSCAD config file (default: machineblocks/config/config-default.scad). Values like unitMbu, unitGrid, and scale are read from this file.'
+    )
+    parser.add_argument(
+        '--center',
+        action='store_true',
+        help='Center the generated model around X and Y axes (origin will be at the center of the model)'
     )
 
     args = parser.parse_args()
@@ -982,7 +1031,10 @@ def main():
             border_height_adjust_mm=args.borderHeightAdjust,
             unit_size=unit_size,
             config_path=args.config,
-            is_frame_mode=args.frame
+            is_frame_mode=args.frame,
+            config=config,
+            center=args.center,
+            image_width=binary_mask.shape[1]
         )
 
         print("\nDone!")

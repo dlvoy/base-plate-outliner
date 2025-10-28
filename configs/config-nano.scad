@@ -43,7 +43,7 @@ baseHeightAdjustment = 0.0; // mm
 
 // Adjustment of each side
 // Amount will be added to/subtracted from each side of the brick's base
-baseSideAdjustment = -0.1; // mm
+baseSideAdjustment = -0.25; // mm
 
 // Adjustment of base walls
 baseWallThicknessAdjustment = -0.1; // mm

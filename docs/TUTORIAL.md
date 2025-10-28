@@ -2,9 +2,11 @@
 
 ![Close-up od custom base plate with model assembled](./images/00_baseplate_closeup.jpg)
 
-This tutorial will walk you through the complete process of creating a custom irregular-shaped baseplate for your building blocks model. 
+This tutorial will walk you through the complete process of creating a custom irregular-shaped baseplate for your building blocks model.
 
 We'll use a nano blocks wood cabin as our example, but you can apply these same techniques to any model you want to create a custom base for.
+
+> **Want to see more examples?** Check out the [Sample Renderings Gallery](./GALLERY.md) for visual examples of different modes and configurations!
 
 ## 0. Setup and Preparation
 

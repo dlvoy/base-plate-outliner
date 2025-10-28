@@ -1,8 +1,12 @@
 # Advanced Features
 
+**Visual Examples**: Want to see what these features look like? Check out the [Sample Renderings Gallery](./GALLERY.md) for rendered images of all modes and configurations!
+
 ## Modes
 
 ### Edge Mode (`--edge`)
+
+<img src="./samples/test-12x12-edge=1.png" alt="Edge mode rendering" height="100">
 
 Edge mode generates baseplates only on the perimeter of the shape, filling the interior with solid cubes for material efficiency:
 
@@ -12,6 +16,8 @@ Edge mode generates baseplates only on the perimeter of the shape, filling the i
 - **Use Case**: Ideal for large shapes where a solid interior saves printing time and material while maintaining structural strength at the edges
 
 ### Border Mode (`--border`)
+
+<img src="./samples/test-12x12-border=12.png" alt="Border mode renderinh" height="100">
 
 Border mode adds a precise millimeter-based border around the outside of your shape:
 
@@ -23,6 +29,8 @@ Border mode adds a precise millimeter-based border around the outside of your sh
 - **Use Case**: Perfect for creating frames, mounting flanges, or custom-sized perimeters around your baseplate
 
 ### Frame Mode (`--frame`)
+
+<img src="./samples/test-12x12-border,frame.png" alt="Border mode renderinh" height="100">
 
 Frame mode creates a filled rectangular border that encloses the entire shape (requires `--border` to be specified):
 
@@ -38,16 +46,37 @@ Frame mode creates a filled rectangular border that encloses the entire shape (r
 - **Border**: Follows the shape's edges closely, creating a border that matches the shape's outline
 - **Frame**: Creates a rectangular enclosure around the shape's bounding box, filling gaps to form a complete rectangle
 
+### Centering (`--center`)
+
+The `--center` option centers the entire generated model around the X and Y axes:
+
+- **Single Transform**: Wraps all generated elements (baseplates, borders, frames) in a single `translate()` operation
+- **Origin Position**: Places the model's center at (0, 0) in OpenSCAD coordinates
+- **Automatic Calculation**: Intelligently calculates the bounding box including borders/frames when present
+- **Use Case**: Ideal for 3D printing (centers model on build plate), rotating models, or creating symmetrical assemblies
+
+**How It Works:**
+- Without borders/frames: Centers based on the image dimensions
+- With borders/frames: Calculates the bounding box of all border/frame elements for accurate centering
+
+**Examples:**
+- `--center`: Center a simple baseplate design
+- `--border=5 --center`: Center a design with border
+- `--frame --border=3 --center`: Center a design with rectangular frame
+
 ### Combining Modes
 
-You can combine `--edge` with either `--border` or `--frame` modes to create complex structures:
+You can combine multiple modes to create complex structures:
 - Baseplates on the edge (with studs for connectivity)
 - Solid interior fill (for material efficiency)
 - Precise mm-based border/frame around the outside (for custom mounting or framing)
+- Centered positioning for easy printing or assembly
 
 **Examples:**
 - `--edge=2 --border=5`: Edge baseplates + border following shape outline
 - `--edge=2 --frame --border=3`: Edge baseplates + rectangular frame with 3mm padding
+- `--border=5 --center`: Centered design with border
+- `--edge=2 --frame --border=3 --center`: Centered edge baseplates with rectangular frame
 
 ## Configurations
 

@@ -1,5 +1,7 @@
 # Usage Guidelines
 
+**Visual Examples**: For rendered images of all features and modes, check out the [Sample Renderings Gallery](./GALLERY.md)
+
 See also [tutorial on creating custom baseplate](./TUTORIAL.md)
 
 ## How It Works
@@ -98,4 +100,13 @@ python3 generate_irregular_baseplate.py my_shape.png --config=my-custom-config.s
 
 # Generate baseplates for Nanoblocks (half-size bricks)
 python3 generate_irregular_baseplate.py my_shape.png --config=configs/config-nano.scad
+
+# Center the model at origin (useful for 3D printing)
+python3 generate_irregular_baseplate.py my_shape.png --center
+
+# Combine multiple options: centered model with border and debug colors
+python3 generate_irregular_baseplate.py my_shape.png --border=3.2 --center --debug
+
+# Center a frame-based design
+python3 generate_irregular_baseplate.py my_shape.png --frame --border=5 --center
 ```
