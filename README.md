@@ -8,8 +8,7 @@ This tool generates OpenSCAD scripts to render irregular-shaped baseplates based
 
 The script analyzes a reference PNG image to identify a shape (dark pixels = inside, light pixels = outside) of custom baseplate, then optimally decomposes the shape into rectangular baseplates and generates an OpenSCAD script to render them.
 
-<img src="./docs/images/01_draw.png" alt="Rendered model" height="220">
-<img src="./docs/images/04_openscad_rendered.png" alt="Rendered model" height="220">
+<img src="./docs/images/01_draw.png" alt="Rendered model" height="220">&nbsp;<img src="./docs/images/04_openscad_rendered.png" alt="Rendered model" height="220">
 
 ## Installation
 
