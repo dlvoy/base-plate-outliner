@@ -213,16 +213,17 @@ For more information about MachineBlocks, visit: https://machineblocks.com/
 
 ## License
 
-This script is provided as-is for use with the MachineBlocks library. 
+This script is [licensed](./LICENSE) under MIT, provided as-is for use with the MachineBlocks library. 
 
 ```
-Copyright (c) 2025 Dominik Dzienia <dominik.dzsienia@gmail.com>
+Copyright (c) 2025 Dominik Dzienia <dominik.dzienia@gmail.com>
 MIT License
 https://opensource.org/license/MIT
 ```
 
 
 The MachineBlocks library itself is:
+
 ```
 Copyright (c) 2022 - 2025 Jan Philipp Knoeller <pk@pksoftware.de>
 Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
